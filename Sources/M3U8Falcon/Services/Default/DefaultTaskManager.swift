@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 // MARK: - Default Task Manager
 
@@ -332,7 +335,7 @@ public actor DefaultTaskManager: TaskManagerProtocol {
         let percentage = Double(completed) / Double(total) * 100
         let speedFormatted = formatBytes(Int64(speed))
         print("\r📊 Starting download \(completed)/\(total) segments (\(String(format: "%.1f", percentage))%) | Speed: \(speedFormatted)/s", terminator: "")
-        fflush(stdout)
+        fflush(nil)
         if completed == total { print("") }
     }
     
@@ -428,7 +431,7 @@ public actor DefaultTaskManager: TaskManagerProtocol {
     private func processUpdateCustomKeyAndIV(_ playlist: MediaPlaylist, taskInfo: inout TaskInfo) async throws {
         if taskInfo.key != nil || taskInfo.iv != nil {
             logger.debug("Custom key/iv are provided, will update local m3u8 file...", category: .processing)
-            let m3u8Content = try String(contentsOf: tempDir.appendingPathComponent("file.m3u8"))
+                let m3u8Content = try String(contentsOf: tempDir.appendingPathComponent("file.m3u8"), encoding: .utf8)
 
             if let keySegment = playlist.tags.keySegments.first {
                 var newKeyLine = "#EXT-X-KEY:"

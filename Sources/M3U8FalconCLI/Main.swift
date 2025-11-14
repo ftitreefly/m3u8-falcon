@@ -8,6 +8,9 @@
 import ArgumentParser
 import Foundation
 import M3U8Falcon
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// M3U8Falcon Command Line Interface
 @main

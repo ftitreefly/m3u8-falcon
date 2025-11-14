@@ -5,7 +5,13 @@
 //  Created by tree_fly on 2025/7/16.
 //
 
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Foundation)
+// Windows or other platforms - Foundation should provide what we need
+#endif
 import Foundation
 
 // MARK: - Log Level

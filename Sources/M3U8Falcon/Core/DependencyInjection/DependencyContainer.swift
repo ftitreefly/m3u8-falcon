@@ -6,6 +6,10 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
 // MARK: - Dependency Container
 
 /// Thread-safe dependency injection container for M3U8 utility services
@@ -152,6 +156,28 @@ public final class DependencyContainer: Sendable {
         registerSingleton(FileSystemServiceProtocol.self) { DefaultFileSystemService() }
         registerSingleton(PathProviderProtocol.self) { DefaultFileSystemService() }
         registerSingleton(CommandExecutorProtocol.self) { DefaultCommandExecutor() }
+        
+        // Platform-specific abstractions
+        registerSingleton(ProcessExecutorProtocol.self) {
+            #if canImport(Darwin)
+            return DarwinProcessExecutor()
+            #else
+            return LinuxProcessExecutor()
+            #endif
+        }
+        
+        registerSingleton(StreamingNetworkClientProtocol.self) {
+            let sessionConfig = URLSessionConfiguration.default
+            sessionConfig.timeoutIntervalForRequest = configuration.downloadTimeout
+            sessionConfig.timeoutIntervalForResource = configuration.resourceTimeout
+            
+            #if canImport(Darwin)
+            return DarwinStreamingNetworkClient(session: URLSession(configuration: sessionConfig))
+            #else
+            return LinuxStreamingNetworkClient(configuration: sessionConfig)
+            #endif
+        }
+        
         registerSingleton(NetworkClientProtocol.self) {
             EnhancedNetworkClient(
                 configuration: configuration,

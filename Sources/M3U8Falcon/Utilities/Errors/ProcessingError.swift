@@ -25,6 +25,10 @@ import Foundation
 /// - 4012: Invalid URL
 /// - 4013: Maximum retry attempts exceeded
 /// - 4014: Invalid hex string
+/// - 4015: Process execution timeout
+/// - 4016: Command execution failed
+/// - 4017: Invalid command
+/// - 4018: Platform-specific error
 public struct ProcessingError: M3U8FalconError {
     public let domain = "M3U8Falcon.Processing"
     public let code: Int
@@ -47,6 +51,10 @@ public struct ProcessingError: M3U8FalconError {
         case 4012: return "The URL is invalid."
         case 4013: return "The maximum retry attempts were exceeded."
         case 4014: return "The KEY or IV hex string is invalid."
+        case 4015: return "The process execution exceeded the timeout limit. Try increasing the timeout or check system resources."
+        case 4016: return "Check the command arguments and ensure the executable exists and is accessible."
+        case 4017: return "Verify the command path and ensure it is executable."
+        case 4018: return "Check system resources and permissions."
         default: return "Verify external tools are installed and retry the operation."
         }
     }
@@ -181,6 +189,60 @@ public struct ProcessingError: M3U8FalconError {
             underlyingError: nil,
             message: "Invalid hex string: \(hexString)",
             operation: "hex string validation"
+        )
+    }
+
+    public static func timeout(duration: TimeInterval) -> ProcessingError {
+        ProcessingError(
+            code: 4015,
+            underlyingError: nil,
+            message: "Process execution timed out after \(duration) seconds",
+            operation: "process execution"
+        )
+    }
+
+    public static func commandFailed(
+        command: String,
+        exitCode: Int32,
+        output: String,
+        error: String
+    ) -> ProcessingError {
+        ProcessingError(
+            code: 4016,
+            underlyingError: nil,
+            message: "Command '\(command)' failed with exit code \(exitCode): \(error.isEmpty ? "No error output" : error)",
+            operation: "command execution"
+        )
+    }
+
+    public static func invalidCommand(command: String, reason: String) -> ProcessingError {
+        ProcessingError(
+            code: 4017,
+            underlyingError: nil,
+            message: "Invalid command '\(command)': \(reason)",
+            operation: "command validation"
+        )
+    }
+
+    public static func platformError(underlying: Error, context: String) -> ProcessingError {
+        ProcessingError(
+            code: 4018,
+            underlyingError: underlying,
+            message: "Platform error in \(context): \(underlying.localizedDescription)",
+            operation: context
+        )
+    }
+
+    /// Creates a ProcessingError from a command execution result
+    public static func fromCommandResult(
+        _ result: ProcessResult,
+        command: String
+    ) -> ProcessingError {
+        return commandFailed(
+            command: command,
+            exitCode: result.exitCode,
+            output: result.outputString,
+            error: result.errorString
         )
     }
 

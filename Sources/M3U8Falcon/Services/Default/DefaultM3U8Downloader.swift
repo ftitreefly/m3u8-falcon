@@ -5,6 +5,9 @@
 //  Created by tree_fly on 2025/7/13.
 //
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 // MARK: - Default M3U8 Downloader
 

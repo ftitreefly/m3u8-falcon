@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Default implementation of M3U8 link extraction from web pages
 /// 
@@ -172,7 +175,7 @@ public final class DefaultM3U8LinkExtractor: M3U8LinkExtractorProtocol {
         
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
-            throw NetworkError.invalidResponse(url.absoluteString)
+            throw NetworkError.invalidResponse(url)
         }
         
         guard let content = String(data: data, encoding: .utf8) else {

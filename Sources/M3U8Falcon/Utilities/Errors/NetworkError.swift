@@ -107,12 +107,12 @@ public struct NetworkError: M3U8FalconError {
     }
     
     /// Invalid or unsupported response
-    public static func invalidResponse(_ url: String) -> NetworkError {
+    public static func invalidResponse(_ url: URL) -> NetworkError {
         NetworkError(
             code: 1006,
             underlyingError: nil,
-            message: "Invalid response from \(url)",
-            url: URL(string: url)
+            message: "Invalid response from \(url.absoluteString)",
+            url: url
         )
     }
     
