@@ -268,8 +268,7 @@ typealias DefaultStreamingNetworkClient = DarwinStreamingNetworkClient
 func makeDefaultStreamingNetworkClient(
     configuration: URLSessionConfiguration
 ) -> StreamingNetworkClientProtocol {
-    let session = URLSession(configuration: configuration)
-    return DefaultStreamingNetworkClient(session: session)
+    return DefaultStreamingNetworkClient(configuration: configuration)
 }
 #else
 typealias DefaultProcessExecutor = LinuxProcessExecutor
