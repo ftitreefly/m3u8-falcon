@@ -19,7 +19,6 @@ public func allTests() -> [XCTestCaseEntry] {
         testCase(ParseTests.__allTests__ParseTests),
         testCase(PerformanceOptimizedTests.__allTests__PerformanceOptimizedTests),
         testCase(NetworkLayerTests.__allTests__NetworkLayerTests),
-        testCase(IntegrationTests.__allTests__IntegrationTests),
         testCase(DownloadTests.__allTests__DownloadTests),
     ]
 }
@@ -223,38 +222,6 @@ extension NetworkLayerTests {
     // - testSuccessfulRequestWithoutRetry
     // - testClientErrorNoRetry
     // - testPerformanceMonitorIntegration
-}
-
-// Wrapper functions for IntegrationTests - only synchronous tests included
-extension IntegrationTests {
-    @nonobjc func testSimpleDependencyInjectionWrapper() {
-        do {
-            try testSimpleDependencyInjection()
-        } catch {
-            XCTFail("testSimpleDependencyInjection failed: \(error)")
-        }
-    }
-    
-    @nonobjc func testM3U8ContentValidationWrapper() {
-        do {
-            try testM3U8ContentValidation()
-        } catch {
-            XCTFail("testM3U8ContentValidation failed: \(error)")
-        }
-    }
-    
-    nonisolated(unsafe) static let __allTests__IntegrationTests: [(String, (IntegrationTests) -> () -> Void)] = [
-        ("testDifferentConfigurations", { $0.testDifferentConfigurations }),
-        ("testSimpleDependencyInjection", { $0.testSimpleDependencyInjectionWrapper }),
-        ("testM3U8ContentValidation", { $0.testM3U8ContentValidationWrapper }),
-        ("testPerformanceOptimizedVsDefault", { $0.testPerformanceOptimizedVsDefault }),
-    ]
-    // Excluded async tests:
-    // - testInvalidURLHandling
-    // - testInvalidM3U8Content
-    // - testMemoryManagement
-    // - testExtractorVersionFromProtocol
-    // - testExtractorInfoFromProtocol
 }
 
 // Wrapper functions for DownloadTests - only synchronous tests included

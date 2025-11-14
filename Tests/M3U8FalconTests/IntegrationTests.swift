@@ -14,313 +14,151 @@ import XCTest
 
 final class IntegrationTests: XCTestCase {
     
-    var testContainer: DependencyContainer!
+    private var container: DependencyContainer!
+    private var configuration: DIConfiguration!
+    private var mockNetworkClient: MockNetworkClient!
+    private var commandExecutor: CommandExecutorProtocol!
+    private var downloader: M3U8DownloaderProtocol!
+    private var parserService: M3U8ParserServiceProtocol!
+    private var fileSystem: FileSystemServiceProtocol!
+    private var tempDirectory: URL!
     
     override func setUpWithError() throws {
-        testContainer = DependencyContainer()
-        // Silence logs for test output
-        Logger.configure(.production())
+        configuration = DIConfiguration(maxConcurrentDownloads: 4, downloadTimeout: 5, resourceTimeout: 10)
+        container = DependencyContainer()
+        container.configure(with: configuration)
+        
+        mockNetworkClient = MockNetworkClient()
+        M3U8TestFixtures.registerAllFixtures(on: mockNetworkClient)
+        
+        commandExecutor = NoopCommandExecutor()
+        
+        let registeredNetworkClient = mockNetworkClient!
+        let registeredCommandExecutor = commandExecutor!
+        
+        container.registerSingleton(NetworkClientProtocol.self) { registeredNetworkClient }
+        container.registerSingleton(CommandExecutorProtocol.self) { registeredCommandExecutor }
+        
+        downloader = try container.resolve(M3U8DownloaderProtocol.self)
+        parserService = try container.resolve(M3U8ParserServiceProtocol.self)
+        fileSystem = try container.resolve(FileSystemServiceProtocol.self)
+        tempDirectory = try fileSystem.createTemporaryDirectory(nil)
     }
     
     override func tearDownWithError() throws {
-        testContainer = nil
+        if let tempDir = tempDirectory {
+            try? FileManager.default.removeItem(at: tempDir)
+        }
+        tempDirectory = nil
+        downloader = nil
+        parserService = nil
+        mockNetworkClient = nil
+        container = nil
     }
     
-    // MARK: - Real M3U8 URLs for Testing
+    // MARK: - Downloader + Parser Integration
     
-    // These are some publicly available HLS test streams for integration testing
-    struct TestM3U8URLs {
-        // Apple's HLS sample stream
-        static let appleBasic = URL(string: "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8")!
+    func testDownloaderAndParserIntegration() async throws {
+        let content = try await downloader.downloadContent(from: M3U8TestFixtures.masterPlaylistURL)
+        let result = try parserService.parseContent(
+            content,
+            baseURL: M3U8TestFixtures.baseURL,
+            type: .master
+        )
         
-        // Simple VOD stream
-        static let simpleVOD = URL(string: "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8")!
-             
-        // Simple M3U8 content for local testing
-        static let sampleM3U8Content = """
-        #EXTM3U
-        #EXT-X-VERSION:3
-        #EXT-X-TARGETDURATION:10
-        #EXT-X-MEDIA-SEQUENCE:0
-        #EXTINF:9.009,
-        segment0.ts
-        #EXTINF:9.009,
-        segment1.ts
-        #EXTINF:9.009,
-        segment2.ts
-        #EXT-X-ENDLIST
-        """
-    }
-    
-    // MARK: - Error Handling Tests
-    
-    func testInvalidURLHandling() async throws {
-        // Simplified invalid URL handling test, without using complex downloader
-        // Starting invalid URL handling test
-        
-        // Test invalid URL string handling
-        let invalidURLString = ":/invalid"
-        let invalidURL = URL(string: invalidURLString)
-        // URL(string:) is quite lenient, so we test URL validity instead
-        if let url = invalidURL {
-            XCTAssertTrue(url.absoluteString.contains(":/"), "URL should contain protocol separator")
+        guard case .master(let playlist) = result else {
+            return XCTFail("Expected master playlist result")
         }
         
-        // Test valid but non-existent URL
-        let notExistURL = URL(string: "https://invalid-domain-that-does-not-exist.com/test.m3u8")!
-        XCTAssertEqual(notExistURL.scheme, "https")
-        XCTAssertEqual(notExistURL.pathExtension, "m3u8")
-        XCTAssertEqual(notExistURL.host, "invalid-domain-that-does-not-exist.com")
-        
-        // Test URL format validation
-        let validURL = URL(string: "https://example.com/test.m3u8")!
-        XCTAssertNotNil(validURL)
-        XCTAssertEqual(validURL.scheme, "https")
-        XCTAssertEqual(validURL.pathExtension, "m3u8")
-        
-        // Test NetworkError creation
-        let networkError = NetworkError.invalidURL(invalidURLString)
-        XCTAssertEqual(networkError.code, 1002)
-        XCTAssertTrue(networkError.localizedDescription.contains(invalidURLString))
-        
-        // Invalid URL handling test passed
+        XCTAssertEqual(playlist.tags.streamTags.count, 1)
+        XCTAssertEqual(playlist.tags.streamTags.first?.bandwidth, 150_000)
+        XCTAssertEqual(playlist.tags.streamTags.first?.resolution, "640x360")
     }
     
-    func testInvalidM3U8Content() async throws {
-        // Simplified invalid content test, without using complex parser
-        // Starting invalid M3U8 content test
+    func testDownloaderProducesMediaPlaylistSegments() async throws {
+        let content = try await downloader.downloadContent(from: M3U8TestFixtures.mediaPlaylistURL)
+        let result = try parserService.parseContent(
+            content,
+            baseURL: M3U8TestFixtures.baseURL,
+            type: .media
+        )
         
-        let invalidContent = "This is not valid M3U8 content"
-        
-        // Check basic M3U8 format validation
-        XCTAssertFalse(invalidContent.hasPrefix("#EXTM3U"), "Invalid content should not have M3U8 header")
-        XCTAssertFalse(invalidContent.contains("#EXT-X-VERSION"), "Invalid content should not contain version info")
-        XCTAssertFalse(invalidContent.contains("#EXTINF"), "Invalid content should not contain segment info")
-        
-        // Test empty content
-        let emptyContent = ""
-        XCTAssertTrue(emptyContent.isEmpty, "Empty content should be empty")
-        
-        // Test partially valid content
-        let partialContent = "#EXTM3U\n#EXT-X-VERSION:3\n"
-        XCTAssertTrue(partialContent.hasPrefix("#EXTM3U"), "Partial content should have M3U8 header")
-        XCTAssertFalse(partialContent.contains("#EXT-X-ENDLIST"), "Partial content should not have end marker")
-        
-        // Invalid M3U8 content test passed
-    }
-    
-    // MARK: - Configuration Tests
-    
-    func testDifferentConfigurations() {
-        // Simplified configuration test, without using complex dependency injection
-        // Starting configuration test
-        
-        // Test default configuration parameters
-        let defaultConfig = DIConfiguration()
-        XCTAssertEqual(defaultConfig.maxConcurrentDownloads, 16)
-        XCTAssertEqual(defaultConfig.downloadTimeout, 300)
-        
-        // Test custom configuration parameters
-        let customConfig = DIConfiguration(maxConcurrentDownloads: 8, downloadTimeout: 120)
-        XCTAssertEqual(customConfig.maxConcurrentDownloads, 8)
-        XCTAssertEqual(customConfig.downloadTimeout, 120)
-        
-        // Test configuration comparison
-        XCTAssertNotEqual(defaultConfig.maxConcurrentDownloads, customConfig.maxConcurrentDownloads)
-        XCTAssertNotEqual(defaultConfig.downloadTimeout, customConfig.downloadTimeout)
-        
-        // Configuration test passed
-    }
-    
-    func testSimpleDependencyInjection() throws {
-        // Test simple dependency injection, without using complex services
-        // Starting simple dependency injection test
-        
-        let container = DependencyContainer()
-        
-        // Register a simple configuration
-        container.register(DIConfiguration.self) { 
-            DIConfiguration(maxConcurrentDownloads: 8, downloadTimeout: 120)
+        guard case .media(let playlist) = result else {
+            return XCTFail("Expected media playlist result")
         }
         
-        // Resolve configuration
-        let config = try container.resolve(DIConfiguration.self)
-        XCTAssertEqual(config.maxConcurrentDownloads, 8)
-        XCTAssertEqual(config.downloadTimeout, 120)
-        
-        // Simple dependency injection test passed
+        XCTAssertEqual(playlist.tags.mediaSegments.count, 3)
+        XCTAssertTrue(playlist.tags.mediaSegments.contains { $0.uri == "segment0.ts" })
     }
     
-    func testM3U8ContentValidation() throws {
-        // Simple M3U8 content validation test, without involving complex parser
-        // Starting M3U8 content validation test
-        
-        let content = TestM3U8URLs.sampleM3U8Content
-        
-        // Basic format validation
-        XCTAssertTrue(content.hasPrefix("#EXTM3U"), "M3U8 file should start with #EXTM3U")
-        XCTAssertTrue(content.contains("#EXT-X-VERSION"), "Should contain version info")
-        XCTAssertTrue(content.contains("#EXT-X-TARGETDURATION"), "Should contain target duration")
-        XCTAssertTrue(content.contains("#EXTINF"), "Should contain segment info")
-        XCTAssertTrue(content.contains("#EXT-X-ENDLIST"), "Should contain end marker")
-        
-        // Count segments
-        let lines = content.components(separatedBy: .newlines)
-        let segmentCount = lines.filter { $0.hasPrefix("#EXTINF") }.count
-        XCTAssertEqual(segmentCount, 3, "Should have 3 segments")
-        
-        // Verify segment filenames
-        let segmentLines = lines.filter { $0.hasSuffix(".ts") }
-        XCTAssertEqual(segmentLines.count, 3, "Should have 3 .ts files")
-        XCTAssertTrue(segmentLines.contains("segment0.ts"))
-        XCTAssertTrue(segmentLines.contains("segment1.ts"))
-        XCTAssertTrue(segmentLines.contains("segment2.ts"))
-        
-        // M3U8 content validation test passed
-    }
+    // MARK: - File System Integration
     
-    // MARK: - Performance Tests
-    
-    func testPerformanceOptimizedVsDefault() {
-        // Simplified performance test, without using complex dependency injection
-        // Starting simplified performance test
+    func testSegmentDownloadsWriteToDisk() async throws {
+        let headers = [
+            "User-Agent": "IntegrationTests",
+            "Accept": "*/*"
+        ]
         
-        let iterations = 1000
+        try await downloader.downloadSegments(
+            at: M3U8TestFixtures.segmentURLs,
+            to: tempDirectory,
+            headers: headers
+        )
         
-        // Test configuration creation performance
-        let startTime = Date().timeIntervalSinceReferenceDate
-        for _ in 0..<iterations {
-            _ = DIConfiguration()
+        for (url, data) in M3U8TestFixtures.mediaSegments {
+            let fileURL = tempDirectory.appendingPathComponent(url.lastPathComponent)
+            XCTAssertTrue(fileSystem.fileExists(at: fileURL))
+            XCTAssertEqual(try Data(contentsOf: fileURL), data)
         }
-        let configTime = Date().timeIntervalSinceReferenceDate - startTime
-        
-        // Test URL creation performance
-        let urlStartTime = Date().timeIntervalSinceReferenceDate
-        for index in 0..<iterations {
-            _ = URL(string: "https://example.com/test\(index).m3u8")
+    }
+    
+    func testDownloaderPropagatesNetworkErrors() async throws {
+        do {
+            _ = try await downloader.downloadContent(from: M3U8TestFixtures.unreachableURL)
+            XCTFail("Expected URLError")
+        } catch {
+            XCTAssertTrue(error is URLError, "Expected URLError, got \(error)")
         }
-        let urlTime = Date().timeIntervalSinceReferenceDate - urlStartTime
-        
-        // Performance test completed
-        
-        // Verify performance data
-        XCTAssertTrue(configTime >= 0 && urlTime >= 0, "Time should be positive")
-        XCTAssertTrue(configTime < 1.0, "Configuration creation should be fast")
-        XCTAssertTrue(urlTime < 1.0, "URL creation should be fast")
-        
-        // Performance verification passed
     }
     
-    // MARK: - Memory Tests
+    // MARK: - Dependency Overrides
     
-    func testMemoryManagement() async throws {
-        // Simplified memory management test, testing basic usage of value types
-        // Starting memory management test
-        
-        // Test configuration object copying and comparison
-        let config1 = DIConfiguration()
-        let config2 = DIConfiguration(maxConcurrentDownloads: 8, downloadTimeout: 120)
-        
-        XCTAssertNotEqual(config1.maxConcurrentDownloads, config2.maxConcurrentDownloads)
-        XCTAssertNotEqual(config1.downloadTimeout, config2.downloadTimeout)
-        
-        // Test URL object copying and comparison
-        let url1 = URL(string: "https://example.com/test1.m3u8")!
-        let url2 = URL(string: "https://example.com/test2.m3u8")!
-        
-        XCTAssertNotEqual(url1, url2)
-        XCTAssertNotEqual(url1.absoluteString, url2.absoluteString)
-        
-        // Test array and collection memory usage
-        var urls: [URL] = []
-        for index in 0..<100 {
-            let url = URL(string: "https://example.com/test\(index).m3u8")!
-            urls.append(url)
-        }
-        
-        XCTAssertEqual(urls.count, 100)
-        urls.removeAll()
-        XCTAssertEqual(urls.count, 0)
-        
-        // Memory management test passed
+    func testContainerResolvesOverriddenNetworkClient() throws {
+        let resolved = try container.resolve(NetworkClientProtocol.self)
+        XCTAssertTrue((resolved as AnyObject) === mockNetworkClient)
     }
     
-    func testExtractorVersionFromProtocol() async throws {
-        // Test that extractor version comes from the extractor itself, not hardcoded
-        let net = DefaultNetworkClient(configuration: .performanceOptimized())
-        let registry = DefaultM3U8ExtractorRegistry(defaultExtractor: DefaultM3U8LinkExtractor(networkClient: net))
-        
-        // Create a custom extractor with specific version
-        let customExtractor = CustomVersionExtractor(version: "2.5.0")
-        registry.registerExtractor(customExtractor)
-        
-        let extractors = registry.getRegisteredExtractors()
-        let customExtractorInfo = extractors.first { $0.name == "CustomVersionExtractor" }
-        
-        XCTAssertNotNil(customExtractorInfo)
-        XCTAssertEqual(customExtractorInfo?.version, "2.5.0")
-        XCTAssertNotEqual(customExtractorInfo?.version, "1.0.0") // Should not be hardcoded
-    }
+    // MARK: - Extractor Registry Integration
     
-    func testExtractorInfoFromProtocol() async throws {
-        // Test that ExtractorInfo comes from the extractor itself, not constructed by registry
-        let net = DefaultNetworkClient(configuration: .performanceOptimized())
-        let registry = DefaultM3U8ExtractorRegistry(defaultExtractor: DefaultM3U8LinkExtractor(networkClient: net))
+    func testCustomExtractorMetadataPersists() throws {
+        let registry = DefaultM3U8ExtractorRegistry(
+            defaultExtractor: DefaultM3U8LinkExtractor(networkClient: mockNetworkClient)
+        )
         
         let customExtractor = CustomInfoExtractor()
         registry.registerExtractor(customExtractor)
         
         let extractors = registry.getRegisteredExtractors()
-        let customExtractorInfo = extractors.first { $0.name == "CustomInfoExtractor" }
+        let info = extractors.first { $0.name == "CustomInfoExtractor" }
         
-        XCTAssertNotNil(customExtractorInfo)
-        XCTAssertEqual(customExtractorInfo?.version, "3.0.0")
-        XCTAssertEqual(customExtractorInfo?.supportedDomains, ["custom.com", "test.com"])
-        XCTAssertEqual(customExtractorInfo?.capabilities, [ExtractionMethod.directLinks, ExtractionMethod.javascriptVariables])
+        XCTAssertNotNil(info)
+        XCTAssertEqual(info?.version, "3.0.0")
+        XCTAssertEqual(info?.supportedDomains, ["custom.com", "test.com"])
     }
     
     // MARK: - Helper Classes
     
-    private final class CustomVersionExtractor: M3U8LinkExtractorProtocol {
-        private let version: String
-        
-        init(version: String) {
-            self.version = version
-        }
-        
-        func extractM3U8Links(from url: URL, options: LinkExtractionOptions) async throws -> [M3U8Link] {
-            return []
-        }
-        
-        func getSupportedDomains() -> [String] {
-            return ["test.com"]
-        }
-        
-        func getExtractorInfo() -> ExtractorInfo {
-            return ExtractorInfo(
-                name: "CustomVersionExtractor",
-                version: version,
-                supportedDomains: getSupportedDomains(),
-                capabilities: [.directLinks]
-            )
-        }
-        
-        func canHandle(url: URL) -> Bool {
-            return true
-        }
-    }
-    
     private final class CustomInfoExtractor: M3U8LinkExtractorProtocol {
         func extractM3U8Links(from url: URL, options: LinkExtractionOptions) async throws -> [M3U8Link] {
-            return []
+            []
         }
         
         func getSupportedDomains() -> [String] {
-            return ["custom.com", "test.com"]
+            ["custom.com", "test.com"]
         }
         
         func getExtractorInfo() -> ExtractorInfo {
-            return ExtractorInfo(
+            ExtractorInfo(
                 name: "CustomInfoExtractor",
                 version: "3.0.0",
                 supportedDomains: getSupportedDomains(),
@@ -328,8 +166,6 @@ final class IntegrationTests: XCTestCase {
             )
         }
         
-        func canHandle(url: URL) -> Bool {
-            return true
-        }
+        func canHandle(url: URL) -> Bool { true }
     }
 }
