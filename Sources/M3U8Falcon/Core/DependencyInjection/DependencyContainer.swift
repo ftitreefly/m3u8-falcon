@@ -142,115 +142,11 @@ public final class DependencyContainer: Sendable {
     /// let taskManager = container.resolve(TaskManagerProtocol.self)
     /// ```
     public func configure(with configuration: DIConfiguration) {
-        // Configure global logger according to DI settings
-        Logger.configure(
-            LoggerConfiguration(
-                minimumLevel: configuration.logLevel,
-                includeTimestamps: false,
-                includeCategories: true,
-                includeEmoji: true,
-                enableColors: true
-            )
-        )
-        registerSingleton(DIConfiguration.self) { configuration }
-        registerSingleton(FileSystemServiceProtocol.self) { DefaultFileSystemService() }
-        registerSingleton(PathProviderProtocol.self) { DefaultFileSystemService() }
-        registerSingleton(CommandExecutorProtocol.self) { DefaultCommandExecutor() }
-        
-        // Platform-specific abstractions
-        registerSingleton(ProcessExecutorProtocol.self) {
-            return DefaultProcessExecutor()
-        }
-        
-        registerSingleton(StreamingNetworkClientProtocol.self) {
-            let sessionConfig = URLSessionConfiguration.default
-            sessionConfig.timeoutIntervalForRequest = configuration.downloadTimeout
-            sessionConfig.timeoutIntervalForResource = configuration.resourceTimeout
-            
-            return DefaultStreamingNetworkClient(sessionConfiguration: sessionConfig)
-        }
-        
-        registerSingleton(NetworkClientProtocol.self) {
-            EnhancedNetworkClient(
-                configuration: configuration,
-                retryStrategy: ExponentialBackoffRetryStrategy(
-                    baseDelay: configuration.retryBackoffBase,
-                    maxAttempts: configuration.retryAttempts
-                ),
-                monitor: nil // Can be configured later for monitoring
-            )
-        }
-        registerSingleton(LoggerProtocol.self) { LoggerAdapter() }
-        
-        register(M3U8DownloaderProtocol.self) { [weak self] in
-            guard let self = self else {
-                fatalError("Container deallocated during service creation")
-            }
-            
-            guard let commandExecutor = try? self.resolve(CommandExecutorProtocol.self),
-                  let configuration = try? self.resolve(DIConfiguration.self),
-                  let net = try? self.resolve(NetworkClientProtocol.self) else {
-                fatalError("Failed to resolve required dependencies for M3U8DownloaderProtocol. Ensure all services are properly configured.")
-            }
-            
-            return DefaultM3U8Downloader(
-                commandExecutor: commandExecutor,
-                configuration: configuration,
-                networkClient: net
-            )
-        }
-        
-        register(M3U8ParserServiceProtocol.self) { DefaultM3U8ParserService() }
-        
-        register(VideoProcessorProtocol.self) { [weak self] in
-            guard let self = self else {
-                fatalError("Container deallocated during service creation")
-            }
-            
-            guard let commandExecutor = try? self.resolve(CommandExecutorProtocol.self),
-                  let configuration = try? self.resolve(DIConfiguration.self) else {
-                fatalError("Failed to resolve required dependencies for VideoProcessorProtocol. Ensure all services are properly configured.")
-            }
-            
-            return DefaultVideoProcessor(
-                commandExecutor: commandExecutor,
-                configuration: configuration
-            )
-        }
-        
-        // Provide extractor registry with injected logger and network client
-        register(M3U8ExtractorRegistryProtocol.self) {
-            let net = DefaultNetworkClient(configuration: configuration)
-            return DefaultM3U8ExtractorRegistry(
-                defaultExtractor: DefaultM3U8LinkExtractor(networkClient: net)
-            )
-        }
-        
-        register(TaskManagerProtocol.self) { [weak self] in
-            guard let self = self else {
-                fatalError("Container deallocated during service creation")
-            }
-            
-            guard let downloader = try? self.resolve(M3U8DownloaderProtocol.self),
-                  let parser = try? self.resolve(M3U8ParserServiceProtocol.self),
-                  let processor = try? self.resolve(VideoProcessorProtocol.self),
-                  let fileSystem = try? self.resolve(FileSystemServiceProtocol.self),
-                  let configuration = try? self.resolve(DIConfiguration.self),
-                  let networkClient = try? self.resolve(NetworkClientProtocol.self) else {
-                fatalError("Failed to resolve required dependencies for TaskManagerProtocol. Ensure all services are properly configured.")
-            }
-            
-            return DefaultTaskManager(
-                downloader: downloader,
-                parser: parser,
-                processor: processor,
-                fileSystem: fileSystem,
-                configuration: configuration,
-                maxConcurrentTasks: configuration.maxConcurrentDownloads / 4,
-                networkClient: networkClient,
-                logger: LoggerAdapter()
-            )
-        }
+        configureLogger(with: configuration)
+        registerCoreServices(with: configuration)
+        registerPlatformServices(with: configuration)
+        registerNetworkLayer(with: configuration)
+        registerDomainServices(with: configuration)
     }
 
     /// Clears all registrations and singletons. Use with caution.
@@ -376,6 +272,128 @@ public extension DependencyContainer {
         return try resolve(type)
     }
 }
+
+// MARK: - Configuration Helpers
+
+private extension DependencyContainer {
+    func configureLogger(with configuration: DIConfiguration) {
+        Logger.configure(
+            LoggerConfiguration(
+                minimumLevel: configuration.logLevel,
+                includeTimestamps: false,
+                includeCategories: true,
+                includeEmoji: true,
+                enableColors: true
+            )
+        )
+    }
+    
+    func registerCoreServices(with configuration: DIConfiguration) {
+        registerSingleton(DIConfiguration.self) { configuration }
+        registerSingleton(FileSystemServiceProtocol.self) { DefaultFileSystemService() }
+        registerSingleton(PathProviderProtocol.self) { DefaultFileSystemService() }
+        registerSingleton(CommandExecutorProtocol.self) { DefaultCommandExecutor() }
+    }
+    
+    func registerPlatformServices(with configuration: DIConfiguration) {
+        registerSingleton(ProcessExecutorProtocol.self) {
+            DefaultProcessExecutor()
+        }
+        
+        registerSingleton(StreamingNetworkClientProtocol.self) {
+            let sessionConfig = URLSessionConfiguration.default
+            sessionConfig.timeoutIntervalForRequest = configuration.downloadTimeout
+            sessionConfig.timeoutIntervalForResource = configuration.resourceTimeout
+            return makeDefaultStreamingNetworkClient(configuration: sessionConfig)
+        }
+    }
+    
+    func registerNetworkLayer(with configuration: DIConfiguration) {
+        registerSingleton(NetworkClientProtocol.self) {
+            EnhancedNetworkClient(
+                configuration: configuration,
+                retryStrategy: ExponentialBackoffRetryStrategy(
+                    baseDelay: configuration.retryBackoffBase,
+                    maxAttempts: configuration.retryAttempts
+                ),
+                monitor: nil
+            )
+        }
+        registerSingleton(LoggerProtocol.self) { LoggerAdapter() }
+    }
+    
+    func registerDomainServices(with configuration: DIConfiguration) {
+        register(M3U8DownloaderProtocol.self) { [weak self] in
+            guard let self = self else {
+                fatalError("Container deallocated during service creation")
+            }
+            
+            guard let commandExecutor = try? self.resolve(CommandExecutorProtocol.self),
+                  let configuration = try? self.resolve(DIConfiguration.self),
+                  let net = try? self.resolve(NetworkClientProtocol.self) else {
+                fatalError("Failed to resolve required dependencies for M3U8DownloaderProtocol. Ensure all services are properly configured.")
+            }
+            
+            return DefaultM3U8Downloader(
+                commandExecutor: commandExecutor,
+                configuration: configuration,
+                networkClient: net
+            )
+        }
+        
+        register(M3U8ParserServiceProtocol.self) { DefaultM3U8ParserService() }
+        
+        register(VideoProcessorProtocol.self) { [weak self] in
+            guard let self = self else {
+                fatalError("Container deallocated during service creation")
+            }
+            
+            guard let commandExecutor = try? self.resolve(CommandExecutorProtocol.self),
+                  let configuration = try? self.resolve(DIConfiguration.self) else {
+                fatalError("Failed to resolve required dependencies for VideoProcessorProtocol. Ensure all services are properly configured.")
+            }
+            
+            return DefaultVideoProcessor(
+                commandExecutor: commandExecutor,
+                configuration: configuration
+            )
+        }
+        
+        register(M3U8ExtractorRegistryProtocol.self) {
+            let net = DefaultNetworkClient(configuration: configuration)
+            return DefaultM3U8ExtractorRegistry(
+                defaultExtractor: DefaultM3U8LinkExtractor(networkClient: net)
+            )
+        }
+        
+        register(TaskManagerProtocol.self) { [weak self] in
+            guard let self = self else {
+                fatalError("Container deallocated during service creation")
+            }
+            
+            guard let downloader = try? self.resolve(M3U8DownloaderProtocol.self),
+                  let parser = try? self.resolve(M3U8ParserServiceProtocol.self),
+                  let processor = try? self.resolve(VideoProcessorProtocol.self),
+                  let fileSystem = try? self.resolve(FileSystemServiceProtocol.self),
+                  let configuration = try? self.resolve(DIConfiguration.self),
+                  let networkClient = try? self.resolve(NetworkClientProtocol.self) else {
+                fatalError("Failed to resolve required dependencies for TaskManagerProtocol. Ensure all services are properly configured.")
+            }
+            
+            return DefaultTaskManager(
+                downloader: downloader,
+                parser: parser,
+                processor: processor,
+                fileSystem: fileSystem,
+                configuration: configuration,
+                maxConcurrentTasks: configuration.maxConcurrentDownloads / 4,
+                networkClient: networkClient,
+                logger: LoggerAdapter()
+            )
+        }
+    }
+}
+
 
 // MARK: - Global DI (Actor-isolated)
 

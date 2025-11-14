@@ -262,16 +262,23 @@ enum PlatformUtils {
 }
 
 #if canImport(Darwin)
-    typealias DefaultProcessExecutor = DarwinProcessExecutor
+typealias DefaultProcessExecutor = DarwinProcessExecutor
+typealias DefaultStreamingNetworkClient = DarwinStreamingNetworkClient
 
-    func DefaultStreamingNetworkClient(sessionConfiguration: URLSessionConfiguration) -> StreamingNetworkClientProtocol {
-        return DarwinStreamingNetworkClient(configuration: sessionConfiguration)
-    }
+func makeDefaultStreamingNetworkClient(
+    configuration: URLSessionConfiguration
+) -> StreamingNetworkClientProtocol {
+    let session = URLSession(configuration: configuration)
+    return DefaultStreamingNetworkClient(session: session)
+}
 #else
-    typealias DefaultProcessExecutor = LinuxProcessExecutor
+typealias DefaultProcessExecutor = LinuxProcessExecutor
+typealias DefaultStreamingNetworkClient = LinuxStreamingNetworkClient
 
-    func DefaultStreamingNetworkClient(sessionConfiguration: URLSessionConfiguration) -> StreamingNetworkClientProtocol {
-        return LinuxStreamingNetworkClient(configuration: sessionConfiguration)
-    }
+func makeDefaultStreamingNetworkClient(
+    configuration: URLSessionConfiguration
+) -> StreamingNetworkClientProtocol {
+    return DefaultStreamingNetworkClient(configuration: configuration)
+}
 #endif
 
