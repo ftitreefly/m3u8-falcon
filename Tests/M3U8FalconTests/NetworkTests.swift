@@ -132,7 +132,7 @@ final class NetworkTests: XCTestCase {
             return
         }
         
-        XCTAssertEqual(playlist.tags.mediaSegments.count, 2)
+        XCTAssertEqual(playlist.tags.mediaSegments.count, 3)
     }
     
     // MARK: - Helpers
