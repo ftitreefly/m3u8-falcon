@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2025-11-14
+
+### Fixed
+- Removed unused `CryptoKit` imports to enable Linux builds
+- Fixed build error: `no such module 'CryptoKit'` on Linux platforms
+
 ## [1.0.0] - 2025-11-13
 
 ### Added
@@ -42,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - macOS 12.0+, Swift 6.0+, FFmpeg (for video processing)
 - Dependencies: swift-argument-parser 1.0.0+
 
-[Unreleased]: https://github.com/ftitreefly/m3u8-falcon/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/ftitreefly/m3u8-falcon/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/ftitreefly/m3u8-falcon/releases/tag/v1.0.1
 [1.0.0]: https://github.com/ftitreefly/m3u8-falcon/releases/tag/v1.0.0
 
