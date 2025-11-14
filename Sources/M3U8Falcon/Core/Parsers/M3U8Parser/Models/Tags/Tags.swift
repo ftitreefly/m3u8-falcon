@@ -106,7 +106,9 @@ public class EXTINF: BaseValueTag<Double>, MultilineTag, @unchecked Sendable {
         let lines = text.components(separatedBy: .newlines)
 
         let linesCount = EXTINF.linesCount(for: text)
-        guard lines.count == linesCount else { throw TagError.invalidData(tag: tagType.tag, received: "more/less than \(linesCount) lines of data", expected: "exactly \(linesCount) lines of data") }
+        guard lines.count == linesCount else { 
+            throw ParsingError.invalidTag(tagType.tag, expected: "exactly \(linesCount) lines of data", received: "more/less than \(linesCount) lines of data")
+        }
         if linesCount == 3 {
             self.bitrate = try EXT_X_BITRATE(text: lines[1], tagType: EXT_X_BITRATE.self, extraParams: nil)
             self.uri = lines[2]
@@ -217,9 +219,9 @@ public class EXT_X_STREAM_INF: BaseAttributedTag, MultilineTag, @unchecked Senda
         ]
         let multiline = text.components(separatedBy: .newlines)
         guard multiline.count == 2 else {
-            throw TagError.invalidData(tag: tagType.tag,
-                                       received: "more/less than 2 lines of data",
-                                       expected: "exactly 2 lines of data, 1 for tag and 1 for uri")
+            throw ParsingError.invalidTag(tagType.tag,
+                                          expected: "exactly 2 lines of data, 1 for tag and 1 for uri",
+                                          received: "more/less than 2 lines of data")
         }
         self.uri = multiline[1]
         try super.init(text: multiline[0], tagType: tagType, extraParams: attributesExtraParams)

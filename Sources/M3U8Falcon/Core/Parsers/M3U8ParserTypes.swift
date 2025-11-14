@@ -28,18 +28,4 @@ public enum M3U8ParserResult: Sendable {
     case cancelled
 }
 
-/**
- * Error types for the parser
- */
-public enum M3U8ParserError: LocalizedError {
-    case parsingFailed(String)
-    
-    public var errorDescription: String? {
-        switch self {
-        case .parsingFailed(let message):
-            return "M3U8 parsing failed: \(message)"
-        }
-    }
-}
-
 // swiftlint:enable all

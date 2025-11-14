@@ -87,19 +87,6 @@ extension TagWithValue {
     }
 }
 
-enum TagError: LocalizedError {
-    case invalidData(tag: String, received: String, expected: String)
-    case missingAttributes
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidData(let tag, let received, let expected):
-            return "Failed to create tag (\(tag)) invalid data, \(received), \(expected).\nMake sure the playlist is valid."
-        case .missingAttributes:
-            return "Required attributes are missing, can not parse invalid playlist"
-        }
-    }
-}
 
 protocol AttributedTag: TagWithValue {
     var attributes: [String: String] { get }
@@ -149,7 +136,7 @@ extension AttributedTag {
     func validateIntegrity(requiredAttributes: [String]) throws {    
         for requiredAttribute in requiredAttributes {
             if self.attributes[requiredAttribute] == nil {
-                throw TagError.missingAttributes
+                throw ParsingError.missingRequiredTag(requiredAttribute)
             }
         }
     }

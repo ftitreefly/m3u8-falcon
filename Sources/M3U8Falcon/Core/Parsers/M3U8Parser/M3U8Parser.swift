@@ -227,7 +227,7 @@ public class M3U8Parser {
     switch params.playlistType {
     case .master:
       guard let masterPlaylistTags = masterPlaylistTagsBuilder.build() else {
-        throw Error.parsingFailed("Failed to build master playlist tags")
+        throw Error.malformedPlaylist("Failed to build master playlist tags")
       }
       let masterPlaylist = MasterPlaylist(
         baseUrl: params.baseUrl,
@@ -237,7 +237,7 @@ public class M3U8Parser {
       return .master(masterPlaylist)
     case .media, .video, .audio, .subtitles:
       guard let mediaPlaylistTags = mediaPlaylistTagsBuilder.build() else {
-        throw Error.parsingFailed("Failed to build media playlist tags")
+        throw Error.malformedPlaylist("Failed to build media playlist tags")
       }
       let mediaPlaylist = MediaPlaylist(
         baseUrl: params.baseUrl,
@@ -355,7 +355,7 @@ public class M3U8Parser {
   /**
    * Error types for the parser
    */
-  public typealias Error = M3U8ParserError
+  public typealias Error = ParsingError
 }
 
 // swiftlint:enable all
