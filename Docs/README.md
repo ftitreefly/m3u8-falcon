@@ -1,5 +1,8 @@
 # M3U8Falcon Documentation
 
+<!-- markdownlint-disable-next-line MD033 -->
+<img src="../Logo-512px.png" alt="M3U8Falcon logo" width="300">
+
 Welcome to the M3U8Falcon documentation! This directory contains comprehensive guides and references for using and extending M3U8Falcon.
 
 ## 📚 Documentation Index
@@ -70,7 +73,7 @@ Comprehensive overview of the M3U8Falcon project, including architecture, design
 
 ## 🔍 Finding Information
 
-### I want to...
+### Common Tasks
 
 - **Download a video**: See [Quick Start Guide](QUICKSTART.md) → Basic Usage
 - **Use the CLI**: See [User Guide](USER_GUIDE.md) → CLI Commands
@@ -101,4 +104,3 @@ This documentation is part of the M3U8Falcon project and is licensed under the M
 ---
 
 **Need help?** Check the [User Guide](USER_GUIDE.md) for troubleshooting, or open an issue on [GitHub](https://github.com/ftitreefly/m3u8-falcon/issues).
-

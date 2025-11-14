@@ -1,5 +1,8 @@
 # M3U8Falcon
 
+<!-- markdownlint-disable-next-line MD033 -->
+<img src="Logo-512px.png" alt="M3U8Falcon 标志" width="300">
+
 中文文档 | [English](README.md)
 
 一个高性能的Swift库和CLI工具，用于下载、解析和处理M3U8视频文件。基于Swift 6+特性、现代并发模式和全面的依赖注入架构构建。
