@@ -113,11 +113,8 @@ final class ParseTests: XCTestCase {
         
         // Empty playlist should throw error
         XCTAssertThrowsError(try parser.parse(params: params)) { error in
-            if let parserError = error as? M3U8Parser.Error {
-                switch parserError {
-                case .parsingFailed(let message):
-                    XCTAssertTrue(message.contains("Failed to build"))
-                }
+            if let parserError = error as? ParsingError {
+                XCTAssertTrue(parserError.message.contains("Failed to build"))
             }
         }
     }
@@ -134,11 +131,8 @@ final class ParseTests: XCTestCase {
         
         // Invalid format should throw error or return build failure
         XCTAssertThrowsError(try parser.parse(params: params)) { error in
-            if let parserError = error as? M3U8Parser.Error {
-                switch parserError {
-                case .parsingFailed(let message):
-                    XCTAssertTrue(message.contains("Failed to build"))
-                }
+            if let parserError = error as? ParsingError {
+                XCTAssertTrue(parserError.message.contains("Failed to build"))
             }
         }
     }

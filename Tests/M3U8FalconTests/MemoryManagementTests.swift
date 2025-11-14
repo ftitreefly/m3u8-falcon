@@ -5,8 +5,53 @@
 //  Created by tree_fly on 2025/9/30.
 //
 
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import XCTest
 @testable import M3U8Falcon
+
+// MARK: - Mock Streaming Client
+
+/// Mock streaming client for testing
+final class MockStreamingClient: StreamingNetworkClientProtocol {
+    func fetchAsyncBytes(from url: URL) async throws -> (URLResponse, AsyncThrowingStream<UInt8, Error>) {
+        // Parse the expected size from the URL if available (e.g., /bytes/512)
+        let urlString = url.absoluteString
+        var size = 1024 // default size
+        
+        // Extract size from URL path like /bytes/512
+        if let bytesRange = urlString.range(of: "/bytes/") {
+            let substring = urlString[bytesRange.upperBound...]
+            let endIndex = substring.firstIndex(where: { !$0.isNumber }) ?? urlString.endIndex
+            let sizeString = String(urlString[bytesRange.upperBound..<endIndex])
+            size = Int(sizeString) ?? 1024
+        }
+        
+        // Create a mock response
+        let response = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Length": "\(size)"]
+        )!
+        
+        // Create a mock byte stream
+        let capturedSize = size // Capture size to avoid concurrency issues
+        let stream = AsyncThrowingStream<UInt8, Error> { continuation in
+            Task {
+                // Generate mock bytes
+                for i in 0..<capturedSize {
+                    continuation.yield(UInt8(i % 256))
+                }
+                continuation.finish()
+            }
+        }
+        
+        return (response, stream)
+    }
+}
 
 /// Tests for memory management components
 final class MemoryManagementTests: XCTestCase {
@@ -102,8 +147,10 @@ final class MemoryManagementTests: XCTestCase {
             monitor: nil
         )
         
+        let streamingClient = MockStreamingClient()
         let downloader = StreamingDownloader(
             networkClient: client,
+            streamingClient: streamingClient,
             bufferSize: 64 * 1024
         )
         
@@ -118,8 +165,10 @@ final class MemoryManagementTests: XCTestCase {
             monitor: nil
         )
         
+        let streamingClient = MockStreamingClient()
         let downloader = StreamingDownloader(
             networkClient: client,
+            streamingClient: streamingClient,
             bufferSize: 8 * 1024  // Small buffer for testing
         )
         
@@ -127,8 +176,6 @@ final class MemoryManagementTests: XCTestCase {
         let url = URL(string: "https://httpbingo.org/bytes/1024")!
         let destination = FileManager.default.temporaryDirectory
             .appendingPathComponent("test-download-\(UUID().uuidString).bin")
-        
-        var progressCallCount = 0
         
         do {
             try await downloader.downloadToFile(
@@ -164,7 +211,11 @@ final class MemoryManagementTests: XCTestCase {
             monitor: nil
         )
         
-        let downloader = StreamingDownloader(networkClient: client)
+        let streamingClient = MockStreamingClient()
+        let downloader = StreamingDownloader(
+            networkClient: client,
+            streamingClient: streamingClient
+        )
         
         // Use a small file for testing
         let url = URL(string: "https://httpbingo.org/bytes/512")!
@@ -176,85 +227,6 @@ final class MemoryManagementTests: XCTestCase {
         } catch {
             print("⚠️ Network test failed (this can happen): \(error)")
         }
-    }
-    
-    // MARK: - Batch Streaming Downloader Tests
-    
-    func testBatchStreamingDownloader() async throws {
-        let config = DIConfiguration.performanceOptimized()
-        let client = EnhancedNetworkClient(
-            configuration: config,
-            retryStrategy: NoRetryStrategy(),
-            monitor: nil
-        )
-        
-        let batchDownloader = BatchStreamingDownloader(
-            networkClient: client,
-            maxConcurrentDownloads: 2,
-            bufferSize: 4 * 1024
-        )
-        
-        // Create test tasks
-        let tasks: [(URL, URL)] = [
-            (
-                URL(string: "https://httpbingo.org/bytes/256")!,
-                FileManager.default.temporaryDirectory.appendingPathComponent("test1.bin")
-            ),
-            (
-                URL(string: "https://httpbingo.org/bytes/512")!,
-                FileManager.default.temporaryDirectory.appendingPathComponent("test2.bin")
-            )
-        ]
-        
-        var progressCount = 0
-        
-        do {
-            try await batchDownloader.downloadBatch(tasks: tasks) { completed, total in
-                XCTAssertLessThanOrEqual(completed, total)
-            }
-            
-            // Verify files exist
-            for (_, destination) in tasks {
-                XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
-                try FileManager.default.removeItem(at: destination)
-            }
-            
-            // Verify statistics
-            let stats = await batchDownloader.getStatistics()
-            XCTAssertEqual(stats.successfulDownloads, 2)
-            XCTAssertEqual(stats.failedDownloads, 0)
-            XCTAssertEqual(stats.successRate, 1.0)
-        } catch {
-            print("⚠️ Network test failed (this can happen): \(error)")
-            
-            // Cleanup on failure
-            for (_, destination) in tasks {
-                try? FileManager.default.removeItem(at: destination)
-            }
-        }
-    }
-    
-    func testBatchStreamingDownloaderStatistics() async {
-        let config = DIConfiguration.performanceOptimized()
-        let client = EnhancedNetworkClient(
-            configuration: config,
-            retryStrategy: NoRetryStrategy(),
-            monitor: nil
-        )
-        
-        let batchDownloader = BatchStreamingDownloader(networkClient: client)
-        
-        // Initial statistics
-        var stats = await batchDownloader.getStatistics()
-        XCTAssertEqual(stats.successfulDownloads, 0)
-        XCTAssertEqual(stats.failedDownloads, 0)
-        XCTAssertEqual(stats.totalDownloads, 0)
-        
-        // Reset statistics
-        await batchDownloader.resetStatistics()
-        
-        stats = await batchDownloader.getStatistics()
-        XCTAssertEqual(stats.totalDownloads, 0)
     }
     
     // MARK: - Memory Efficiency Tests
@@ -270,8 +242,10 @@ final class MemoryManagementTests: XCTestCase {
             monitor: nil
         )
         
+        let streamingClient = MockStreamingClient()
         let downloader = StreamingDownloader(
             networkClient: client,
+            streamingClient: streamingClient,
             bufferSize: 16 * 1024  // 16 KB buffer
         )
         

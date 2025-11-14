@@ -5,6 +5,10 @@
 //  Created by tree_fly on 2025/7/13.
 //
 
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 @testable import M3U8Falcon
 import XCTest
 
@@ -184,18 +188,18 @@ final class IntegrationTests: XCTestCase {
         let iterations = 1000
         
         // Test configuration creation performance
-        let startTime = CFAbsoluteTimeGetCurrent()
+        let startTime = Date().timeIntervalSinceReferenceDate
         for _ in 0..<iterations {
             _ = DIConfiguration()
         }
-        let configTime = CFAbsoluteTimeGetCurrent() - startTime
+        let configTime = Date().timeIntervalSinceReferenceDate - startTime
         
         // Test URL creation performance
-        let urlStartTime = CFAbsoluteTimeGetCurrent()
+        let urlStartTime = Date().timeIntervalSinceReferenceDate
         for index in 0..<iterations {
             _ = URL(string: "https://example.com/test\(index).m3u8")
         }
-        let urlTime = CFAbsoluteTimeGetCurrent() - urlStartTime
+        let urlTime = Date().timeIntervalSinceReferenceDate - urlStartTime
         
         // Performance test completed
         

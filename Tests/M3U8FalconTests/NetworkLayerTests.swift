@@ -5,6 +5,10 @@
 //  Created by tree_fly on 2025/9/30.
 //
 
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import XCTest
 @testable import M3U8Falcon
 

@@ -5,6 +5,10 @@
 //  Created by tree_fly on 2025/7/13.
 //
 
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 @testable import M3U8Falcon
 import XCTest
 
@@ -168,12 +172,12 @@ final class NetworkTests: XCTestCase {
 
         let url = URL(string: "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/gear1/fileSequence0.ts")!
         
-        let startTime = CFAbsoluteTimeGetCurrent()
+        let startTime = Date().timeIntervalSinceReferenceDate
         
         do {
             let session = makeEphemeralSession(timeoutSeconds: 10)
             let (data, _) = try await session.data(from: url)
-            let endTime = CFAbsoluteTimeGetCurrent()
+            let endTime = Date().timeIntervalSinceReferenceDate
             
             let downloadTime = endTime - startTime
             let dataSize = data.count
