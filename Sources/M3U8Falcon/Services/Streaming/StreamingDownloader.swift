@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 // MARK: - Streaming Downloader
 
@@ -13,19 +16,20 @@ import Foundation
 /// 
 /// This downloader uses streaming techniques to download large files without
 /// loading the entire content into memory. It's particularly useful for downloading
-/// large video segments.
+/// large video segments. Platform-specific streaming is handled by StreamingNetworkClientProtocol.
 /// 
 /// ## Features
-/// - Streaming download with configurable buffer size
+/// - Platform-abstracted streaming download
+/// - Configurable buffer size
 /// - Memory-efficient for large files
 /// - Progress tracking support
-/// - Automatic retry on failure
 /// - Chunked writing to disk
 /// 
 /// ## Usage Example
 /// ```swift
 /// let downloader = StreamingDownloader(
 ///     networkClient: client,
+///     streamingClient: streamingClient,
 ///     bufferSize: 256 * 1024  // 256 KB buffer
 /// )
 /// 
@@ -41,11 +45,11 @@ public actor StreamingDownloader {
     /// The network client for making requests
     private let networkClient: NetworkClientProtocol
     
-    /// Buffer size for streaming (default: 64 KB)
-    private let bufferSize: Int
+    /// The streaming network client for byte stream downloads
+    private let streamingClient: StreamingNetworkClientProtocol
     
-    /// URLSession for streaming downloads
-    private let session: URLSession
+    /// Buffer size for streaming (default: 256 KB)
+    private let bufferSize: Int
     
     /// Progress handler type
     public typealias ProgressHandler = @Sendable (Int64, Int64?) -> Void
@@ -54,18 +58,16 @@ public actor StreamingDownloader {
     /// 
     /// - Parameters:
     ///   - networkClient: The network client to use for requests
+    ///   - streamingClient: Platform-specific streaming client (injected via DI)
     ///   - bufferSize: Size of the buffer for streaming (default: 256 KB)
     public init(
         networkClient: NetworkClientProtocol,
+        streamingClient: StreamingNetworkClientProtocol,
         bufferSize: Int = 256 * 1024
     ) {
         self.networkClient = networkClient
+        self.streamingClient = streamingClient
         self.bufferSize = bufferSize
-        
-        // Configure URLSession for streaming
-        let config = URLSessionConfiguration.default
-        config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        self.session = URLSession(configuration: config)
     }
     
     /// Downloads a file to disk using streaming
@@ -87,7 +89,7 @@ public actor StreamingDownloader {
         progressHandler: ProgressHandler? = nil
     ) async throws {
         // Validate response and get content length
-        let (asyncBytes, response) = try await session.bytes(from: url)
+        let (byteStream, response) = try await fetchAsyncBytes(from: url)
         
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
@@ -102,7 +104,7 @@ public actor StreamingDownloader {
             : nil
         
         // Create destination file
-        FileManager.default.createFile(
+        _ = FileManager.default.createFile(
             atPath: destination.path,
             contents: nil,
             attributes: [.posixPermissions: 0o644]
@@ -122,27 +124,22 @@ public actor StreamingDownloader {
         buffer.reserveCapacity(bufferSize)
         
         do {
-            for try await byte in asyncBytes {
+            for try await byte in byteStream {
                 buffer.append(byte)
                 
-                // Write buffer to disk when it's full
                 if buffer.count >= bufferSize {
                     try fileHandle.write(contentsOf: buffer)
                     bytesDownloaded += Int64(buffer.count)
                     
-                    // Report progress
                     await callProgressHandler(
                         progressHandler,
                         bytesDownloaded: bytesDownloaded,
                         totalBytes: totalBytes
                     )
                     
-                    // Clear buffer for reuse
                     buffer.removeAll(keepingCapacity: true)
                 }
             }
-            
-            // Write remaining data
             if !buffer.isEmpty {
                 try fileHandle.write(contentsOf: buffer)
                 bytesDownloaded += Int64(buffer.count)
@@ -154,11 +151,8 @@ public actor StreamingDownloader {
                 )
             }
             
-            // Ensure data is written to disk
             try fileHandle.synchronize()
-            
         } catch {
-            // Clean up partial file on error
             try? FileManager.default.removeItem(at: destination)
             throw error
         }
@@ -180,7 +174,7 @@ public actor StreamingDownloader {
         url: URL,
         progressHandler: ProgressHandler? = nil
     ) async throws -> Data {
-        let (asyncBytes, response) = try await session.bytes(from: url)
+        let (byteStream, response) = try await fetchAsyncBytes(from: url)
         
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
@@ -194,14 +188,13 @@ public actor StreamingDownloader {
             ? httpResponse.expectedContentLength 
             : nil
         
-        var data = Data()
+        var resultData = Data()
         var bytesDownloaded: Int64 = 0
         
-        for try await byte in asyncBytes {
-            data.append(byte)
+        for try await byte in byteStream {
+            resultData.append(byte)
             bytesDownloaded += 1
             
-            // Report progress periodically (every 64 KB)
             if bytesDownloaded % Int64(bufferSize) == 0 {
                 await callProgressHandler(
                     progressHandler,
@@ -211,14 +204,13 @@ public actor StreamingDownloader {
             }
         }
         
-        // Final progress update
         await callProgressHandler(
             progressHandler,
             bytesDownloaded: bytesDownloaded,
             totalBytes: totalBytes
         )
         
-        return data
+        return resultData
     }
     
     /// Calls the progress handler safely
@@ -232,153 +224,11 @@ public actor StreamingDownloader {
     }
 }
 
-// MARK: - Batch Streaming Downloader
+// MARK: - Async Byte Fetching Helpers
 
-/// Batch downloader for multiple files with memory management
-/// 
-/// This downloader manages multiple concurrent streaming downloads
-/// with automatic memory management and progress tracking.
-public actor BatchStreamingDownloader {
-    private let streamingDownloader: StreamingDownloader
-    private let maxConcurrentDownloads: Int
-    
-    /// Download statistics
-    private var totalBytesDownloaded: Int64 = 0
-    private var failedDownloads: Int = 0
-    private var successfulDownloads: Int = 0
-    
-    /// Initializes a batch streaming downloader
-    /// 
-    /// - Parameters:
-    ///   - networkClient: The network client to use
-    ///   - maxConcurrentDownloads: Maximum number of concurrent downloads
-    ///   - bufferSize: Buffer size for each download
-    public init(
-        networkClient: NetworkClientProtocol,
-        maxConcurrentDownloads: Int = 5,
-        bufferSize: Int = 64 * 1024
-    ) {
-        self.streamingDownloader = StreamingDownloader(
-            networkClient: networkClient,
-            bufferSize: bufferSize
-        )
-        self.maxConcurrentDownloads = maxConcurrentDownloads
-    }
-    
-    /// Downloads multiple files concurrently
-    /// 
-    /// - Parameters:
-    ///   - tasks: Array of download tasks (URL, destination pairs)
-    ///   - progressHandler: Optional progress callback for overall progress
-    /// 
-    /// - Throws: An error if any download fails
-    public func downloadBatch(
-        tasks: [(url: URL, destination: URL)],
-        progressHandler: ((Int, Int) -> Void)? = nil
-    ) async throws {
-        guard !tasks.isEmpty else { return }
-        
-        await withThrowingTaskGroup(of: Void.self) { group in
-            var activeDownloads = 0
-            var taskIndex = 0
-            var completedTasks = 0
-            
-            // Start initial batch
-            while activeDownloads < maxConcurrentDownloads && taskIndex < tasks.count {
-                let task = tasks[taskIndex]
-                group.addTask {
-                    try await self.downloadSingleFile(url: task.url, destination: task.destination)
-                }
-                activeDownloads += 1
-                taskIndex += 1
-            }
-            
-            // Process completions and start new downloads
-            while activeDownloads > 0 {
-                do {
-                    try await group.next()
-                    successfulDownloads += 1
-                } catch {
-                    failedDownloads += 1
-                    Logger.error(
-                        "Download failed: \(error.localizedDescription)",
-                        category: .download
-                    )
-                }
-                
-                activeDownloads -= 1
-                completedTasks += 1
-                
-                // Report progress
-                progressHandler?(completedTasks, tasks.count)
-                
-                // Start next download
-                if taskIndex < tasks.count {
-                    let task = tasks[taskIndex]
-                    group.addTask {
-                        try await self.downloadSingleFile(url: task.url, destination: task.destination)
-                    }
-                    activeDownloads += 1
-                    taskIndex += 1
-                }
-            }
-        }
-    }
-    
-    /// Downloads a single file (internal method)
-    private func downloadSingleFile(url: URL, destination: URL) async throws {
-        try await streamingDownloader.downloadToFile(
-            url: url,
-            destination: destination,
-            progressHandler: { bytesDownloaded, _ in
-                Task { await self.updateTotalBytes(bytesDownloaded) }
-            }
-        )
-    }
-    
-    /// Updates total bytes downloaded
-    private func updateTotalBytes(_ bytes: Int64) {
-        totalBytesDownloaded = bytes
-    }
-    
-    /// Gets download statistics
-    public func getStatistics() -> DownloadStatistics {
-        return DownloadStatistics(
-            totalBytesDownloaded: totalBytesDownloaded,
-            successfulDownloads: successfulDownloads,
-            failedDownloads: failedDownloads
-        )
-    }
-    
-    /// Resets statistics
-    public func resetStatistics() {
-        totalBytesDownloaded = 0
-        failedDownloads = 0
-        successfulDownloads = 0
-    }
-}
-
-// MARK: - Download Statistics
-
-/// Statistics for batch downloads
-public struct DownloadStatistics: Sendable {
-    /// Total bytes downloaded
-    public let totalBytesDownloaded: Int64
-    
-    /// Number of successful downloads
-    public let successfulDownloads: Int
-    
-    /// Number of failed downloads
-    public let failedDownloads: Int
-    
-    /// Total number of downloads
-    public var totalDownloads: Int {
-        successfulDownloads + failedDownloads
-    }
-    
-    /// Success rate (0.0 to 1.0)
-    public var successRate: Double {
-        guard totalDownloads > 0 else { return 0.0 }
-        return Double(successfulDownloads) / Double(totalDownloads)
+private extension StreamingDownloader {
+    func fetchAsyncBytes(from url: URL) async throws -> (AsyncThrowingStream<UInt8, Error>, URLResponse) {
+        let (response, stream) = try await streamingClient.fetchAsyncBytes(from: url)
+        return (stream, response)
     }
 }

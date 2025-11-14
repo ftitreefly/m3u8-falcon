@@ -106,17 +106,12 @@ struct DownloadCommand: AsyncParsableCommand {
     ///   - `ExitCode.failure` if URL is invalid or download fails
     ///   - Various network and file system errors during download
     mutating func run() async throws {
+        try await validateFFmpegAvailability()
 
         // Ensure DI is configured (idempotent)
         await M3U8Falcon.initialize()
 
-        let outputDirectory: URL
-        do {
-            let paths = try await GlobalDependencies.shared.resolve(PathProviderProtocol.self)
-            outputDirectory = paths.downloadsDirectory()
-        } catch {
-            outputDirectory = URL(fileURLWithPath: "\(NSHomeDirectory())/Downloads/")
-        }
+        let outputDirectory = await resolveOutputDirectory()
             
         guard let downloadURL = URL(string: url) else {
             OutputFormatter.printError("Invalid URL format")
@@ -178,4 +173,135 @@ struct OutputFormatter {
     static func printWarning(_ message: String) {
         print("⚠️  \(message)")
     }
+}
+
+// MARK: - Private Helpers
+
+private extension DownloadCommand {
+    /// Ensures FFmpeg is available before starting downloads
+    func validateFFmpegAvailability() async throws {
+        let configuration = try await GlobalDependencies.shared.resolve(DIConfiguration.self)
+        guard let ffmpegPath = configuration.ffmpegPath else {
+            OutputFormatter.printError("FFmpeg executable not found. Please install FFmpeg (https://ffmpeg.org/download.html) or provide a DI configuration with a valid ffmpegPath.")
+            throw ExitCode.failure
+        }
+        
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: ffmpegPath), fileManager.isExecutableFile(atPath: ffmpegPath) else {
+            OutputFormatter.printError("FFmpeg executable is not accessible at \(ffmpegPath). Verify the path or install FFmpeg.")
+            throw ExitCode.failure
+        }
+    }
+
+    /// Resolves the default output directory, handling Linux-specific cases
+    func resolveOutputDirectory() async -> URL {
+        if let provider = try? await GlobalDependencies.shared.resolve(PathProviderProtocol.self) {
+            let directory = provider.downloadsDirectory()
+            if ensureDirectoryExists(directory) {
+                return directory
+            }
+        }
+
+        #if os(Linux)
+        if let xdgPath = resolveXDGDownloadDir(), ensureDirectoryExists(xdgPath) {
+            return xdgPath
+        }
+        #endif
+
+        let fallback = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Downloads", isDirectory: true)
+        _ = ensureDirectoryExists(fallback)
+        return fallback
+    }
+
+    @discardableResult
+    func ensureDirectoryExists(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) {
+            return isDirectory.boolValue
+        }
+
+        do {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            return true
+        } catch {
+            OutputFormatter.printWarning("Failed to create directory at \(url.path): \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    #if os(Linux)
+    func resolveXDGDownloadDir() -> URL? {
+        if let envPath = ProcessInfo.processInfo.environment["XDG_DOWNLOAD_DIR"], !envPath.isEmpty {
+            return normalizeXDGPath(envPath)
+        }
+
+        let configFile = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config", isDirectory: true)
+            .appendingPathComponent("user-dirs.dirs", isDirectory: false)
+
+        guard let contents = try? String(contentsOf: configFile, encoding: .utf8) else {
+            return nil
+        }
+
+        for line in contents.split(whereSeparator: \.isNewline) {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix("XDG_DOWNLOAD_DIR=") else { continue }
+
+            let valueStart = trimmed.index(trimmed.startIndex, offsetBy: "XDG_DOWNLOAD_DIR=".count)
+            var value = trimmed[valueStart...].trimmingCharacters(in: .whitespacesAndNewlines)
+            value = value.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+
+            if let url = normalizeXDGPath(String(value)) {
+                return url
+            }
+        }
+
+        return nil
+    }
+
+    func normalizeXDGPath(_ rawPath: String) -> URL? {
+        guard !rawPath.isEmpty else { return nil }
+        var path = rawPath
+        
+        // Expand all environment variables in the format $VAR or ${VAR}
+        let environment = ProcessInfo.processInfo.environment
+        
+        // Pattern for ${VAR} format
+        var pattern = #/\$\{([A-Z_][A-Z0-9_]*)\}/#
+        while let match = path.firstMatch(of: pattern) {
+            let varName = String(match.1)
+            if let value = environment[varName] {
+                path = path.replacingOccurrences(of: "${\(varName)}", with: value)
+            } else {
+                // If variable not found, leave it as is or remove
+                path = path.replacingOccurrences(of: "${\(varName)}", with: "")
+            }
+        }
+        
+        // Pattern for $VAR format (word boundary)
+        pattern = #/\$([A-Z_][A-Z0-9_]*)/#
+        while let match = path.firstMatch(of: pattern) {
+            let varName = String(match.1)
+            if let value = environment[varName] {
+                path = path.replacingOccurrences(of: "$\(varName)", with: value)
+            } else {
+                // If variable not found, leave it as is or remove
+                path = path.replacingOccurrences(of: "$\(varName)", with: "")
+            }
+        }
+        
+        // Expand tilde after environment variables (in case ~ was in an env var)
+        if path.hasPrefix("~") {
+            path = (path as NSString).expandingTildeInPath
+        }
+        
+        // Final validation - path must be absolute after expansion
+        guard path.hasPrefix("/") else {
+            return nil
+        }
+        
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }
+    #endif
 }

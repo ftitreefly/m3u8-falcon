@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 // MARK: - Enhanced Network Client
 
@@ -70,15 +73,20 @@ public actor EnhancedNetworkClient: NetworkClientProtocol {
         sessionConfig.timeoutIntervalForRequest = configuration.downloadTimeout
         sessionConfig.timeoutIntervalForResource = configuration.resourceTimeout
         
-        // HTTP/2 support
-        sessionConfig.httpShouldUsePipelining = true
-        
         // Cache configuration
+        #if canImport(Darwin)
         sessionConfig.urlCache = URLCache(
             memoryCapacity: 50 * 1024 * 1024,   // 50 MB memory cache
             diskCapacity: 100 * 1024 * 1024,    // 100 MB disk cache
             directory: nil
         )
+        #else
+        sessionConfig.urlCache = URLCache(
+            memoryCapacity: 50 * 1024 * 1024,
+            diskCapacity: 100 * 1024 * 1024,
+            diskPath: nil
+        )
+        #endif
         sessionConfig.requestCachePolicy = .returnCacheDataElseLoad
         
         // Cookie and credential management
@@ -146,7 +154,7 @@ public actor EnhancedNetworkClient: NetworkClientProtocol {
                 )
                 
                 // Validate the response
-                try validateResponse(response, data: data, url: request.url)
+                try validateResponse(response, data: data, url: request.url!)
                 
                 // Log success
                 if attempt > 0 {
@@ -203,9 +211,9 @@ public actor EnhancedNetworkClient: NetworkClientProtocol {
     ///   - url: The request URL
     /// 
     /// - Throws: `NetworkError` if validation fails
-    private func validateResponse(_ response: URLResponse, data: Data, url: URL?) throws {
+    private func validateResponse(_ response: URLResponse, data: Data, url: URL) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw NetworkError.invalidResponse(url?.absoluteString ?? "unknown")
+            throw NetworkError.invalidResponse(url)
         }
         
         let statusCode = httpResponse.statusCode
@@ -217,21 +225,15 @@ public actor EnhancedNetworkClient: NetworkClientProtocol {
             
         case 400...499:
             // Client errors - don't retry
-            throw NetworkError.clientError(
-                url ?? URL(string: "unknown")!,
-                statusCode: statusCode
-            )
+            throw NetworkError.clientError(url,statusCode: statusCode)
             
         case 500...599:
             // Server errors - can retry
-            throw NetworkError.serverError(
-                url ?? URL(string: "unknown")!,
-                statusCode: statusCode
-            )
+            throw NetworkError.serverError(url, statusCode: statusCode)
             
         default:
             // Unknown status code
-            throw NetworkError.invalidResponse(url?.absoluteString ?? "unknown")
+            throw NetworkError.invalidResponse(url)
         }
     }
     
@@ -317,6 +319,3 @@ public protocol PerformanceMonitorProtocol: Sendable {
     ///   - unit: The unit of measurement
     func record(name: String, value: Double, unit: String) async
 }
-
-// Note: DefaultNetworkClient is defined in DefaultCommandExecutor.swift
-// for backwards compatibility and simpler use cases.
