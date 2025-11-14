@@ -11,7 +11,8 @@ A high-performance Swift library and CLI tool for downloading, parsing, and proc
 
 - 🚀 **Swift 6+ Ready**: Built with the latest Swift 6 features including strict concurrency checking
 - 🔧 **Dependency Injection**: Full DI architecture for better testability and modularity
-- 📱 **Cross-Platform**: macOS 12.0+ support with both library and CLI interfaces
+- 📱 **Cross-Platform**: macOS 12.0+ and Linux support with both library and CLI interfaces
+- 🐧 **Linux Compatible**: Full Linux support with platform-specific optimizations
 - 🛡️ **Comprehensive Error Handling**: Detailed error types with context information
 - 🔄 **Concurrent Downloads**: Configurable concurrent download support (up to 20 concurrent tasks)
 - 📊 **Advanced Logging System**: Multi-level logging with categories and colored output
@@ -25,9 +26,30 @@ A high-performance Swift library and CLI tool for downloading, parsing, and proc
 
 ### Installation
 
+#### macOS
+
 ```bash
 # 1. Install FFmpeg (required for video processing)
 brew install ffmpeg
+
+# 2. Add to your Package.swift
+dependencies: [
+    .package(url: "https://github.com/ftitreefly/m3u8-falcon.git", from: "1.0.0")
+]
+```
+
+#### Linux
+
+```bash
+# 1. Install FFmpeg (required for video processing)
+# Ubuntu/Debian
+sudo apt update && sudo apt install ffmpeg
+
+# Fedora/RHEL
+sudo dnf install ffmpeg
+
+# Arch Linux
+sudo pacman -S ffmpeg
 
 # 2. Add to your Package.swift
 dependencies: [
@@ -245,6 +267,47 @@ m3u8-falcon extract "https://example.com/video-page" --show-extractors
 
 # Specify extraction method
 m3u8-falcon extract "https://example.com/video-page" --methods direct-links
+```
+
+---
+
+## 🐧 Linux Support
+
+M3U8Falcon fully supports Linux with platform-specific optimizations:
+
+### Platform-Specific Features
+
+- ✅ **Process Execution**: Optimized polling-based output capture for Linux
+- ✅ **Streaming Downloads**: Custom byte streaming implementation using URLSessionDataDelegate
+- ✅ **Thread Safety**: Platform-aware concurrency management with NSLock and DispatchGroup
+- ✅ **Path Resolution**: XDG Base Directory specification support for user directories
+- ✅ **FFmpeg Integration**: Automatic FFmpeg path detection across common Linux installations
+
+### Platform Differences
+
+The library automatically handles platform differences:
+
+| Feature | macOS/iOS | Linux |
+|---------|-----------|-------|
+| Process Output Capture | `readabilityHandler` | Polling with `DispatchGroup` |
+| Streaming Downloads | `URLSession.bytes` | `URLSessionDataDelegate` |
+| Terminal Detection | `Darwin.isatty` | `Glibc.isatty` |
+| URL Cache | `directory` parameter | `diskPath` parameter |
+| Downloads Directory | `~/Downloads` | XDG_DOWNLOAD_DIR / `~/.config/user-dirs.dirs` |
+
+### Building on Linux
+
+```bash
+# Clone and build
+git clone https://github.com/ftitreefly/m3u8-falcon.git
+cd m3u8-falcon
+swift build
+
+# Run tests
+swift test
+
+# Run CLI
+swift run m3u8-falcon download https://example.com/video.m3u8 -v
 ```
 
 ---

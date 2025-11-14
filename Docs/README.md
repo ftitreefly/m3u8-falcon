@@ -71,6 +71,18 @@ Guide for developers who want to extend M3U8Falcon or contribute to the project.
 
 Comprehensive overview of the M3U8Falcon project, including architecture, design patterns, technology stack, and project goals.
 
+## 🐧 Platform Support
+
+M3U8Falcon supports both **macOS 12.0+** and **Linux** with platform-specific optimizations:
+
+- ✅ **Cross-Platform**: Full support for macOS and Linux
+- ✅ **Platform Abstractions**: Automatic handling of platform differences
+- ✅ **Optimized Performance**: Platform-specific implementations for best performance
+- ✅ **XDG Compliance**: Linux directory structure follows XDG Base Directory specification
+- ✅ **Thread Safety**: Platform-aware concurrency management
+
+For detailed Linux support information, see the [main README](../README.md#-linux-support).
+
 ## 🔍 Finding Information
 
 ### Common Tasks
@@ -82,6 +94,7 @@ Comprehensive overview of the M3U8Falcon project, including architecture, design
 - **Understand the architecture**: See [Project Overview](PROJECT_OVERVIEW.md) → Architecture Overview
 - **Contribute code**: See [Developer Guide](DEVELOPER_GUIDE.md) → Contributing
 - **Troubleshoot issues**: See [User Guide](USER_GUIDE.md) → Troubleshooting
+- **Linux support**: See [main README](../README.md#-linux-support) → Platform differences
 
 ## 📝 Additional Resources
 

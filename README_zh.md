@@ -11,7 +11,8 @@
 
 - 🚀 **Swift 6+ 就绪**: 使用最新的Swift 6特性构建，包括严格的并发检查
 - 🔧 **依赖注入**: 完整的DI架构，提高可测试性和模块化
-- 📱 **跨平台**: 支持macOS 12.0+，提供库和CLI两种接口
+- 📱 **跨平台**: 支持 macOS 12.0+ 和 Linux，提供库和CLI两种接口
+- 🐧 **Linux 兼容**: 完整的 Linux 支持，提供平台特定优化
 - 🛡️ **全面的错误处理**: 详细的错误类型和上下文信息
 - 🔄 **并发下载**: 可配置的并发下载支持（最多20个并发任务）
 - 📊 **高级日志系统**: 多级别日志，支持分类和彩色输出
@@ -25,9 +26,30 @@
 
 ### 安装
 
+#### macOS
+
 ```bash
 # 1. 安装FFmpeg（视频处理必需）
 brew install ffmpeg
+
+# 2. 添加到你的Package.swift
+dependencies: [
+    .package(url: "https://github.com/ftitreefly/m3u8-falcon.git", from: "1.0.0")
+]
+```
+
+#### Linux
+
+```bash
+# 1. 安装FFmpeg（视频处理必需）
+# Ubuntu/Debian
+sudo apt update && sudo apt install ffmpeg
+
+# Fedora/RHEL
+sudo dnf install ffmpeg
+
+# Arch Linux
+sudo pacman -S ffmpeg
 
 # 2. 添加到你的Package.swift
 dependencies: [
@@ -244,6 +266,47 @@ m3u8-falcon extract "https://example.com/video-page" --show-extractors
 
 # 指定提取方法
 m3u8-falcon extract "https://example.com/video-page" --methods direct-links
+```
+
+---
+
+## 🐧 Linux 支持
+
+M3U8Falcon 完整支持 Linux，并提供平台特定优化：
+
+### 平台特定功能
+
+- ✅ **进程执行**: Linux 优化的基于轮询的输出捕获
+- ✅ **流式下载**: 使用 URLSessionDataDelegate 的自定义字节流实现
+- ✅ **线程安全**: 平台感知的并发管理，使用 NSLock 和 DispatchGroup
+- ✅ **路径解析**: 支持 XDG Base Directory 规范的用户目录
+- ✅ **FFmpeg 集成**: 自动检测常见 Linux 安装位置的 FFmpeg 路径
+
+### 平台差异
+
+库会自动处理平台差异：
+
+| 功能 | macOS/iOS | Linux |
+|------|-----------|-------|
+| 进程输出捕获 | `readabilityHandler` | 基于 `DispatchGroup` 的轮询 |
+| 流式下载 | `URLSession.bytes` | `URLSessionDataDelegate` |
+| 终端检测 | `Darwin.isatty` | `Glibc.isatty` |
+| URL 缓存 | `directory` 参数 | `diskPath` 参数 |
+| 下载目录 | `~/Downloads` | XDG_DOWNLOAD_DIR / `~/.config/user-dirs.dirs` |
+
+### 在 Linux 上构建
+
+```bash
+# 克隆并构建
+git clone https://github.com/ftitreefly/m3u8-falcon.git
+cd m3u8-falcon
+swift build
+
+# 运行测试
+swift test
+
+# 运行 CLI
+swift run m3u8-falcon download https://example.com/video.m3u8 -v
 ```
 
 ---
