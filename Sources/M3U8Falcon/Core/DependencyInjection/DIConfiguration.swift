@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Configuration settings for dependency injection and service behavior
 /// 
@@ -157,7 +160,9 @@ extension DIConfiguration {
     /// 1. Homebrew on Apple Silicon: `/opt/homebrew/bin/ffmpeg`
     /// 2. Homebrew on Intel Mac: `/usr/local/bin/ffmpeg`
     /// 3. System installation: `/usr/bin/ffmpeg`
-    /// 4. PATH environment lookup
+    /// 4. Snap packages: `/snap/bin/ffmpeg`
+    /// 5. Custom installs: `/usr/local/sbin/ffmpeg`, `/usr/sbin/ffmpeg`
+    /// 6. PATH environment lookup
     /// 
     /// - Returns: The path to FFmpeg if found, otherwise `nil`
     private static func detectFFmpegPath() -> String? {
@@ -165,6 +170,9 @@ extension DIConfiguration {
             "/opt/homebrew/bin/ffmpeg",      // Apple Silicon Homebrew
             "/usr/local/bin/ffmpeg",         // Intel Homebrew / Manual
             "/usr/bin/ffmpeg",               // System / Linux
+            "/snap/bin/ffmpeg",              // Snap package
+            "/usr/local/sbin/ffmpeg",        // Custom installs
+            "/usr/sbin/ffmpeg"               // Some distributions
         ]
         
         // Check common paths first (faster)
@@ -180,37 +188,28 @@ extension DIConfiguration {
     
     /// Finds an executable in the system PATH
     /// 
-    /// This method uses the `which` command to locate an executable
-    /// in the system PATH environment variable.
+    /// This method directly searches the PATH environment variable
+    /// to locate an executable, checking if the file exists and is executable.
     /// 
     /// - Parameter executable: The name of the executable to find
     /// - Returns: The full path to the executable if found, otherwise `nil`
     private static func findInPath(executable: String) -> String? {
-        let process = Process()
-        let pipe = Pipe()
-        
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = [executable]
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        
-        do {
-            try process.run()
-            process.waitUntilExit()
-            
-            guard process.terminationStatus == 0 else {
-                return nil
-            }
-            
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            guard let output = String(data: data, encoding: .utf8) else {
-                return nil
-            }
-            
-            let path = output.trimmingCharacters(in: .whitespacesAndNewlines)
-            return path.isEmpty ? nil : path
-        } catch {
+        guard let pathEnv = ProcessInfo.processInfo.environment["PATH"] else {
             return nil
         }
+        
+        let fileManager = FileManager.default
+        let paths = pathEnv.split(separator: ":").map(String.init)
+        
+        for path in paths {
+            let fullPath = (path as NSString).appendingPathComponent(executable)
+            
+            // Check if file exists and is executable
+            if fileManager.fileExists(atPath: fullPath) && fileManager.isExecutableFile(atPath: fullPath) {
+                return fullPath
+            }
+        }
+        
+        return nil
     }
 }
