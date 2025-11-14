@@ -10,13 +10,14 @@ import Foundation
 
 /// Darwin-specific streaming network client using URLSession.bytes
 final class DarwinStreamingNetworkClient: StreamingNetworkClientProtocol {
-    private let session: URLSession
+    private let configuration: URLSessionConfiguration
     
-    init(session: URLSession) {
-        self.session = session
+    init(configuration: URLSessionConfiguration) {
+        self.configuration = configuration
     }
     
     func fetchAsyncBytes(from url: URL) async throws -> (URLResponse, AsyncThrowingStream<UInt8, Error>) {
+        let session = URLSession(configuration: configuration)
         let (asyncBytes, response) = try await session.bytes(from: url)
         
         // Convert AsyncBytes to AsyncThrowingStream<UInt8, Error>

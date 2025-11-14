@@ -159,11 +159,7 @@ public final class DependencyContainer: Sendable {
         
         // Platform-specific abstractions
         registerSingleton(ProcessExecutorProtocol.self) {
-            #if canImport(Darwin)
-            return DarwinProcessExecutor()
-            #else
-            return LinuxProcessExecutor()
-            #endif
+            return DefaultProcessExecutor()
         }
         
         registerSingleton(StreamingNetworkClientProtocol.self) {
@@ -171,11 +167,7 @@ public final class DependencyContainer: Sendable {
             sessionConfig.timeoutIntervalForRequest = configuration.downloadTimeout
             sessionConfig.timeoutIntervalForResource = configuration.resourceTimeout
             
-            #if canImport(Darwin)
-            return DarwinStreamingNetworkClient(session: URLSession(configuration: sessionConfig))
-            #else
-            return LinuxStreamingNetworkClient(configuration: sessionConfig)
-            #endif
+            return DefaultStreamingNetworkClient(sessionConfiguration: sessionConfig)
         }
         
         registerSingleton(NetworkClientProtocol.self) {
