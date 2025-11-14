@@ -16,10 +16,10 @@ public func allTests() -> [XCTestCaseEntry] {
     // @Sendable type casting issues on Linux.
     // Tests with @Sendable closures or @unchecked Sendable classes are excluded.
     return [
-        testCase(ParseTests.__allTests__ParseTests),
-        testCase(PerformanceOptimizedTests.__allTests__PerformanceOptimizedTests),
-        testCase(NetworkLayerTests.__allTests__NetworkLayerTests),
-        testCase(DownloadTests.__allTests__DownloadTests),
+        testCase(ParseTests.allTestsParseTests),
+        testCase(PerformanceOptimizedTests.allTestsPerformanceOptimizedTests),
+        testCase(NetworkLayerTests.allTestsNetworkLayerTests),
+        testCase(DownloadTests.allTestsDownloadTests),
     ]
 }
 #endif
@@ -121,7 +121,7 @@ extension ParseTests {
         }
     }
     
-    nonisolated(unsafe) static let __allTests__ParseTests: [(String, (ParseTests) -> () -> Void)] = [
+    nonisolated(unsafe) static let allTestsParseTests: [(String, (ParseTests) -> () -> Void)] = [
         ("testDifferentPlaylistTypes", { $0.testDifferentPlaylistTypesWrapper }),
         ("testParseEmptyPlaylist", { $0.testParseEmptyPlaylistWrapper }),
         ("testParseInvalidPlaylist", { $0.testParseInvalidPlaylistWrapper }),
@@ -188,7 +188,7 @@ extension PerformanceOptimizedTests {
         }
     }
     
-    nonisolated(unsafe) static let __allTests__PerformanceOptimizedTests: [(String, (PerformanceOptimizedTests) -> () -> Void)] = [
+    nonisolated(unsafe) static let allTestsPerformanceOptimizedTests: [(String, (PerformanceOptimizedTests) -> () -> Void)] = [
         ("testBasicInitialization", { $0.testBasicInitializationWrapper }),
         ("testCommandExecutorCreation", { $0.testCommandExecutorCreationWrapper }),
         ("testConfigurationValidation", { $0.testConfigurationValidationWrapper }),
@@ -207,7 +207,7 @@ extension PerformanceOptimizedTests {
 
 // Wrapper functions for NetworkLayerTests - only synchronous tests included
 extension NetworkLayerTests {
-    nonisolated(unsafe) static let __allTests__NetworkLayerTests: [(String, (NetworkLayerTests) -> () -> Void)] = [
+    nonisolated(unsafe) static let allTestsNetworkLayerTests: [(String, (NetworkLayerTests) -> () -> Void)] = [
         ("testExponentialBackoffCalculation", { $0.testExponentialBackoffCalculation }),
         ("testRetryableErrors", { $0.testRetryableErrors }),
         ("testLinearBackoffStrategy", { $0.testLinearBackoffStrategy }),
@@ -234,7 +234,7 @@ extension DownloadTests {
         }
     }
     
-    nonisolated(unsafe) static let __allTests__DownloadTests: [(String, (DownloadTests) -> () -> Void)] = [
+    nonisolated(unsafe) static let allTestsDownloadTests: [(String, (DownloadTests) -> () -> Void)] = [
         ("testPerformanceOptimizedConfiguration", { $0.testPerformanceOptimizedConfigurationWrapper }),
     ]
     // Excluded async tests:

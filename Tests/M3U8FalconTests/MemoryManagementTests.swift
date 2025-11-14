@@ -42,8 +42,8 @@ final class MockStreamingClient: StreamingNetworkClientProtocol {
         let stream = AsyncThrowingStream<UInt8, Error> { continuation in
             Task {
                 // Generate mock bytes
-                for i in 0..<capturedSize {
-                    continuation.yield(UInt8(i % 256))
+                for index in 0..<capturedSize {
+                    continuation.yield(UInt8(index % 256))
                 }
                 continuation.finish()
             }
