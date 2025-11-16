@@ -31,9 +31,6 @@ let package = Package(
             name: "M3U8Falcon",
             dependencies: [
                 .product(name: "Atomics", package: "swift-atomics"),
-            ],
-            swiftSettings: [
-                .enableExperimentalFeature("StrictConcurrency"),
             ]
         ),
         .executableTarget(
@@ -41,9 +38,6 @@ let package = Package(
             dependencies: [
                 "M3U8Falcon",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
-            ],
-            swiftSettings: [
-                .enableExperimentalFeature("StrictConcurrency"),
             ]
         ),
         .testTarget(
@@ -58,9 +52,6 @@ let package = Package(
             dependencies: [
                 "M3U8FalconCLI",
                 "M3U8Falcon"
-            ],
-            swiftSettings: [
-                .enableExperimentalFeature("StrictConcurrency"),
             ]
         ),
     ]
