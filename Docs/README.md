@@ -27,6 +27,11 @@ Welcome to the M3U8Falcon documentation! This directory contains comprehensive g
 - **[Project Overview (English)](PROJECT_OVERVIEW.md)** - Architecture and design overview
 - **[项目概览 (中文)](PROJECT_OVERVIEW_zh.md)** - 架构和设计概览
 
+### Platform-Specific Documentation
+
+- **[Linux Support Guide (English)](LINUX_SUPPORT.md)** - Complete Linux support guide
+- **[Linux 支持指南 (中文)](LINUX_SUPPORT_zh.md)** - Linux 支持完整指南
+
 ## 🚀 Quick Links
 
 ### For End Users
@@ -81,7 +86,9 @@ M3U8Falcon supports both **macOS 12.0+** and **Linux** with platform-specific op
 - ✅ **XDG Compliance**: Linux directory structure follows XDG Base Directory specification
 - ✅ **Thread Safety**: Platform-aware concurrency management
 
-For detailed Linux support information, see the [main README](../README.md#-linux-support).
+For detailed Linux support information:
+- **[Linux Support Guide](LINUX_SUPPORT.md)** - Complete guide with architecture diagrams and troubleshooting
+- [Main README](../README.md#-linux-support) - Quick reference
 
 ## 🔍 Finding Information
 
@@ -94,7 +101,7 @@ For detailed Linux support information, see the [main README](../README.md#-linu
 - **Understand the architecture**: See [Project Overview](PROJECT_OVERVIEW.md) → Architecture Overview
 - **Contribute code**: See [Developer Guide](DEVELOPER_GUIDE.md) → Contributing
 - **Troubleshoot issues**: See [User Guide](USER_GUIDE.md) → Troubleshooting
-- **Linux support**: See [main README](../README.md#-linux-support) → Platform differences
+- **Linux support**: See [Linux Support Guide](LINUX_SUPPORT.md) → Complete guide with architecture and troubleshooting
 
 ## 📝 Additional Resources
 
