@@ -22,7 +22,6 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.0.0"),
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.1.0"),
         .package(url: "https://github.com/apple/swift-atomics.git", from: "1.2.0"),
-        .package(url: "https://github.com/apple/swift-testing.git", from: "6.0.0"),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -44,7 +43,7 @@ let package = Package(
             name: "M3U8FalconTests",
             dependencies: [
                 "M3U8Falcon",
-                .product(name: "Testing", package: "swift-testing")
+                //.product(name: "Testing", package: "swift-testing")
             ]
         ),
         .testTarget(
