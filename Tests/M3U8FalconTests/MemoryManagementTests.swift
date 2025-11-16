@@ -63,8 +63,15 @@ final class MemoryManagementTests {
     func resourceManagerStatistics() async throws {
         let manager = ResourceManager()
         
-        _ = try await manager.createTemporaryDirectory(prefix: "test1")
-        _ = try await manager.createTemporaryDirectory(prefix: "test2")
+        let dir1 = try await manager.createTemporaryDirectory(prefix: "test1")
+        let dir2 = try await manager.createTemporaryDirectory(prefix: "test2")
+        
+        // Create files in directories to ensure totalSize > 0
+        let file1 = dir1.appendingPathComponent("file1.txt")
+        try "test content 1".write(to: file1, atomically: true, encoding: .utf8)
+        
+        let file2 = dir2.appendingPathComponent("file2.txt")
+        try "test content 2".write(to: file2, atomically: true, encoding: .utf8)
         
         let stats = await manager.getStatistics()
         #expect(stats.totalResources == 2)
