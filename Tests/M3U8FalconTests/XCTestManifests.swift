@@ -221,7 +221,6 @@ extension NetworkLayerTests {
     // - testEnhancedNetworkClientRequestCounting
     // - testSuccessfulRequestWithoutRetry
     // - testClientErrorNoRetry
-    // - testPerformanceMonitorIntegration
 }
 
 // Wrapper functions for DownloadTests - only synchronous tests included

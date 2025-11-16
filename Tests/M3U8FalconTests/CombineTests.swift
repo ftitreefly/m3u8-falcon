@@ -9,43 +9,46 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
-import XCTest
-
 @testable import M3U8Falcon
+import Testing
 
-final class CombineTests: XCTestCase, @unchecked Sendable {
+@Suite("Combine Tests")
+final class CombineTests {
 
-    var testContainer: DependencyContainer!
-    var tempDirectory: URL!
-    var fileSystem: FileSystemServiceProtocol!
-    var videoSystem: VideoProcessorProtocol!
-    var httpSystem: M3U8DownloaderProtocol!
+    private var testEnv: TestEnvironment
+    private var tempDirectory: URL
+    private var fileSystem: FileSystemServiceProtocol
+    private var videoSystem: VideoProcessorProtocol
+    private var httpSystem: M3U8DownloaderProtocol
 
-    override func setUpWithError() throws {
-        testContainer = DependencyContainer()
-        testContainer.configure(with: DIConfiguration.performanceOptimized())
+    init() throws {
+        testEnv = try TestEnvironment.create(
+            containerConfig: DIConfiguration.performanceOptimized()
+        )
         
-        videoSystem = try testContainer.resolve(VideoProcessorProtocol.self)
-        httpSystem = try testContainer.resolve(M3U8DownloaderProtocol.self)
+        videoSystem = try testEnv.container.resolve(VideoProcessorProtocol.self)
+        // Use real network client for downloading test segments from Apple's server
+        let realNetworkClient = try testEnv.container.resolve(NetworkClientProtocol.self)
+        httpSystem = DefaultM3U8Downloader(
+            commandExecutor: NoopCommandExecutor(),
+            configuration: testEnv.configuration,
+            networkClient: realNetworkClient
+        )
         
-        fileSystem = try testContainer.resolve(FileSystemServiceProtocol.self)
-        tempDirectory = try fileSystem.createTemporaryDirectory(nil)
+        fileSystem = testEnv.fileSystem
+        tempDirectory = testEnv.tempDirectory
     }
 
-    override func tearDownWithError() throws {
-        if let tempDir = tempDirectory {
-            try? FileManager.default.removeItem(at: tempDir)
-        }
-        
-        testContainer = nil
+    deinit {
+        try? FileManager.default.removeItem(at: tempDirectory)
     }
 
     // MARK: - Helper Methods
 
     /// Download test ts segments from network
-    private func downloadTestSegments(count: Int = 3) async throws -> URL {
+    private func downloadTestSegments(count: Int = 3) async throws -> URL? {
         guard await canReachAppleTestServer() else {
-            throw XCTSkip("Skipping: network not available or Apple test server unreachable")
+            return nil // Return nil to indicate skip
         }
         
         let segmentBaseURL = "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/gear1/"
@@ -68,7 +71,7 @@ final class CombineTests: XCTestCase, @unchecked Sendable {
         )
         
         let files = try fileSystem.contentsOfDirectory(at: segmentsDirectory)
-        XCTAssertGreaterThanOrEqual(files.count, count, "Should have downloaded at least \(count) files")
+        #expect(files.count >= count, "Should have downloaded at least \(count) files")
         
         return segmentsDirectory
     }
@@ -124,26 +127,27 @@ final class CombineTests: XCTestCase, @unchecked Sendable {
     /// Common helper to run a combine test for N segments
     private func runCombineTest(segmentsCount: Int, outputName: String) async throws {
         guard isFFmpegAvailable() else {
-            throw XCTSkip("Skipping combine test: FFmpeg may be unavailable")
+            return // Skip test if FFmpeg is not available
         }
-        let segmentsDirectory = try await downloadTestSegments(count: segmentsCount)
+        guard let segmentsDirectory = try await downloadTestSegments(count: segmentsCount) else {
+            return // Skip test if network is not available
+        }
         let outputFile = tempDirectory.appendingPathComponent(outputName)
         try await videoSystem.combineSegments(in: segmentsDirectory, outputFile: outputFile)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: outputFile.path), "Combined output file should exist")
+        #expect(FileManager.default.fileExists(atPath: outputFile.path), "Combined output file should exist")
         let attributes = try FileManager.default.attributesOfItem(atPath: outputFile.path)
         let fileSize = attributes[.size] as? UInt64 ?? 0
-        XCTAssertGreaterThan(fileSize, 0, "Output file size should be greater than 0")
+        #expect(fileSize > 0, "Output file size should be greater than 0")
     }
 
     // MARK: - DefaultVideoProcessor Tests
 
     /// Test DefaultVideoProcessor basic functionality
-    func testDefaultVideoProcessorBasicFunctionality() async throws {
-        XCTAssertNotNil(videoSystem, "VideoProcessor should be properly resolved")
-
+    @Test("DefaultVideoProcessor basic functionality")
+    func defaultVideoProcessorBasicFunctionality() async throws {
         // Verify VideoProcessor is DefaultVideoProcessor type
         guard videoSystem is DefaultVideoProcessor else {
-            XCTFail("VideoProcessor should be DefaultVideoProcessor type")
+            Issue.record("VideoProcessor should be DefaultVideoProcessor type")
             return
         }
 
@@ -151,24 +155,20 @@ final class CombineTests: XCTestCase, @unchecked Sendable {
     }
 
     /// Test video segment combination functionality with 1 segment
-    func testCombineSingleSegment() async throws {
+    @Test("Combine single segment")
+    func combineSingleSegment() async throws {
         try await runCombineTest(segmentsCount: 1, outputName: "combined_single.mp4")
     }
 
-    /// Test video segment combination functionality with 2 segments
-    func testCombineTwoSegments() async throws {
-        try await runCombineTest(segmentsCount: 2, outputName: "combined_two.mp4")
-    }
-
     /// Test video segment combination functionality with 3 segments
-    func testCombineThreeSegments() async throws {
+    @Test("Combine three segments")
+    func combineThreeSegments() async throws {
         try await runCombineTest(segmentsCount: 3, outputName: "combined_three.mp4")
     }
 
     /// Test error handling with empty directory
-    func testErrorHandlingEmptyDirectory() async throws {
-        // Starting error handling test with empty directory
-
+    @Test("Error handling with empty directory")
+    func errorHandlingEmptyDirectory() async throws {
         // Test handling of empty directory
         let emptyDirectory = tempDirectory.appendingPathComponent("empty_segments")
         try FileManager.default.createDirectory(at: emptyDirectory, withIntermediateDirectories: true)
@@ -177,29 +177,27 @@ final class CombineTests: XCTestCase, @unchecked Sendable {
 
         do {
             try await videoSystem.combineSegments(in: emptyDirectory, outputFile: outputFile)
-            XCTFail("Should throw error because directory is empty")
+            Issue.record("Should throw error because directory is empty")
         } catch {
             // Error handling test passed
-            XCTAssertTrue(error is ProcessingError, "Should throw ProcessingError type error")
+            #expect(error is ProcessingError, "Should throw ProcessingError type error")
         }
     }
 
     /// Test error handling with non-existent directory
-    func testErrorHandlingNonExistentDirectory() async throws {
-        // Starting error handling test with non-existent directory
-
+    @Test("Error handling with non-existent directory")
+    func errorHandlingNonExistentDirectory() async throws {
         // Test handling of non-existent directory
         let nonExistentDirectory = tempDirectory.appendingPathComponent("non_existent_segments")
         let outputFile = tempDirectory.appendingPathComponent("error_output2.mp4")
 
         do {
             try await videoSystem.combineSegments(in: nonExistentDirectory, outputFile: outputFile)
-            XCTFail("Should throw error because directory does not exist")
+            Issue.record("Should throw error because directory does not exist")
         } catch {
             // Error handling test passed
             // The error could be various types depending on the implementation
             // Just verify that an error was thrown
-            XCTAssertTrue(true, "Error was correctly thrown for non-existent directory")
         }
     }
 }

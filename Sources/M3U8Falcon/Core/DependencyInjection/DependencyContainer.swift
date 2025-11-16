@@ -315,8 +315,7 @@ private extension DependencyContainer {
                 retryStrategy: ExponentialBackoffRetryStrategy(
                     baseDelay: configuration.retryBackoffBase,
                     maxAttempts: configuration.retryAttempts
-                ),
-                monitor: nil
+                )
             )
         }
         registerSingleton(LoggerProtocol.self) { LoggerAdapter() }
@@ -366,7 +365,7 @@ private extension DependencyContainer {
             )
         }
         
-        register(TaskManagerProtocol.self) { [weak self] in
+        registerSingleton(TaskManagerProtocol.self) { [weak self] in
             guard let self = self else {
                 fatalError("Container deallocated during service creation")
             }

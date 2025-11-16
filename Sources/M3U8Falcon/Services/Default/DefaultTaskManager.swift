@@ -265,13 +265,15 @@ public actor DefaultTaskManager: TaskManagerProtocol {
             taskInfo.status = TaskStatus.failed(error)
             tasks[taskId] = taskInfo
             
-            if let processingError = error as? ProcessingError {
-                throw processingError
+            // Preserve original error types if they're already M3U8FalconError
+            if let falconError = error as? (any M3U8FalconError) {
+                throw falconError
             } else {
+                // Convert unknown errors to ProcessingError with context
                 throw ProcessingError(
                     code: 4999,
                     underlyingError: error,
-                    message: "Default task execution failed",
+                    message: "Default task execution failed: \(error.localizedDescription)",
                     operation: "task execution"
                 )
             }
@@ -316,7 +318,7 @@ public actor DefaultTaskManager: TaskManagerProtocol {
             activeTasks: activeTasksCount,
             averageDownloadTime: avgDownloadTime,
             averageProcessingTime: avgProcessingTime,
-            totalExecutionTime: totalDownloadTime + totalProcessingTime
+            cumulativeTaskTime: totalDownloadTime + totalProcessingTime
         )
     }
     
@@ -687,44 +689,28 @@ public actor DefaultTaskManager: TaskManagerProtocol {
  
 // MARK: - Performance Metrics
 
+/// Aggregated performance metrics across all completed tasks
+/// 
+/// This struct provides performance statistics for monitoring and optimization.
+/// All time values represent cumulative totals across all completed tasks.
 public struct PerformanceMetrics: Sendable {
+    /// Number of tasks that have completed successfully
     public let completedTasks: Int
+    
+    /// Number of currently active tasks
     public let activeTasks: Int
+    
+    /// Average time spent downloading across all completed tasks (in seconds)
     public let averageDownloadTime: TimeInterval
+    
+    /// Average time spent processing across all completed tasks (in seconds)
     public let averageProcessingTime: TimeInterval
-    public let totalExecutionTime: TimeInterval
     
-    public var throughput: Double {
-        totalExecutionTime > 0 ? Double(completedTasks) / totalExecutionTime : 0
-    }
-}
-
-// MARK: - Performance Metrics Extensions
-
-public extension PerformanceMetrics {
-    /// Human-readable performance summary
-    var summary: String {
-        return """
-        Performance Summary:
-        - Completed Tasks: \(completedTasks)
-        - Active Tasks: \(activeTasks)
-        - Average Download: \(String(format: "%.2f", averageDownloadTime))s
-        - Average Processing: \(String(format: "%.2f", averageProcessingTime))s
-        - Throughput: \(String(format: "%.2f", throughput)) tasks/sec
-        - Total Time: \(String(format: "%.2f", totalExecutionTime))s
-        """
-    }
-    
-    /// Performance rating based on throughput
-    var rating: String {
-        switch throughput {
-        case 0..<0.1: return "Poor"
-        case 0.1..<0.5: return "Fair"
-        case 0.5..<1.0: return "Good"
-        case 1.0..<2.0: return "Very Good"
-        default: return "Excellent"
-        }
-    }
+    /// Cumulative total time across all completed tasks (in seconds)
+    /// 
+    /// This is the sum of all download and processing times from completed tasks.
+    /// Note: For concurrent tasks, this may exceed the actual wall-clock time.
+    public let cumulativeTaskTime: TimeInterval
 }
 
 

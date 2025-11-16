@@ -9,71 +9,54 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
-import XCTest
-
 @testable import M3U8Falcon
+import Testing
 
-final class DownloadTests: XCTestCase {
+@Suite("Download Tests")
+final class DownloadTests {
     
-    private var configuration: DIConfiguration!
-    private var tempDirectory: URL!
-    private var fileSystem: FileSystemServiceProtocol!
-    private var downloader: M3U8DownloaderProtocol!
-    private var mockNetworkClient: MockNetworkClient!
-    private var commandExecutor: CommandExecutorProtocol!
+    private var testEnv: TestEnvironment
+    private var downloader: M3U8DownloaderProtocol
     
-    override func setUpWithError() throws {
-        configuration = DIConfiguration(maxConcurrentDownloads: 4, downloadTimeout: 5, resourceTimeout: 10)
-        fileSystem = DefaultFileSystemService()
-        tempDirectory = try fileSystem.createTemporaryDirectory(nil)
-        
-        mockNetworkClient = MockNetworkClient()
-        M3U8TestFixtures.registerAllFixtures(on: mockNetworkClient)
-        
-        commandExecutor = NoopCommandExecutor()
-        downloader = DefaultM3U8Downloader(
-            commandExecutor: commandExecutor,
-            configuration: configuration,
-            networkClient: mockNetworkClient
-        )
+    init() throws {
+        testEnv = try TestEnvironment.create()
+        downloader = testEnv.createDownloader()
     }
     
-    override func tearDownWithError() throws {
-        if let tempDir = tempDirectory {
-            try? FileManager.default.removeItem(at: tempDir)
-        }
-        tempDirectory = nil
-        downloader = nil
-        mockNetworkClient = nil
+    deinit {
+        try? FileManager.default.removeItem(at: testEnv.tempDirectory)
     }
+    
+    // Convenience accessors
+    private var configuration: DIConfiguration { testEnv.configuration }
+    private var tempDirectory: URL { testEnv.tempDirectory }
+    private var fileSystem: FileSystemServiceProtocol { testEnv.fileSystem }
+    private var mockNetworkClient: MockNetworkClient { testEnv.mockNetworkClient }
     
     // MARK: - Basic Download Tests
     
-    func testPerformanceOptimizedConfiguration() throws {
-        let config = DIConfiguration.performanceOptimized()
-        XCTAssertGreaterThan(config.maxConcurrentDownloads, 8)
-        XCTAssertGreaterThan(config.downloadTimeout, 0)
-    }
-    
-    func testDownloadContentFromValidURL() async throws {
+    @Test("Download content from valid URL")
+    func downloadContentFromValidURL() async throws {
         let content = try await downloader.downloadContent(from: M3U8TestFixtures.masterPlaylistURL)
-        XCTAssertFalse(content.isEmpty)
-        XCTAssertTrue(content.contains("#EXT-X-VERSION:7"))
+        #expect(!content.isEmpty)
+        #expect(content.contains("#EXT-X-VERSION:7"))
     }
     
     // MARK: - M3U8 Playlist Download Tests
     
-    func testDownloadM3U8Playlist() async throws {
+    @Test("Download M3U8 playlist")
+    func downloadM3U8Playlist() async throws {
         for (url, _) in M3U8TestFixtures.playlistMap {
             let content = try await downloader.downloadContent(from: url)
-            XCTAssertTrue(content.hasPrefix("#EXTM3U"))
-            XCTAssertTrue(content.contains("#EXTINF") || content.contains("#EXT-X-STREAM-INF"))
+            #expect(content.hasPrefix("#EXTM3U"))
+            #expect(content.contains("#EXTINF") || content.contains("#EXT-X-STREAM-INF"))
         }
     }
     
     // MARK: - Video Segment Download Tests
     
-    func testDownloadVideoSegments() async throws {
+    @Test("Download video segments")
+    func downloadVideoSegments() async throws {
         let headers = [
             "User-Agent": "M3U8Falcon-Test/1.0",
             "Accept": "*/*"
@@ -87,17 +70,18 @@ final class DownloadTests: XCTestCase {
         
         for (url, data) in M3U8TestFixtures.mediaSegments {
             let fileURL = tempDirectory.appendingPathComponent(url.lastPathComponent)
-            XCTAssertTrue(fileSystem.fileExists(at: fileURL))
+            #expect(fileSystem.fileExists(at: fileURL))
             let saved = try Data(contentsOf: fileURL)
-            XCTAssertEqual(saved, data)
+            #expect(saved == data)
         }
     }
     
     // MARK: - Simple String Response Concurrent Download Tests
     
-    func testSimpleStringResponseConcurrentDownloads() async throws {
+    @Test("Simple string response concurrent downloads")
+    func simpleStringResponseConcurrentDownloads() async throws {
         let urls = Array(repeating: M3U8TestFixtures.masterPlaylistURL, count: 3)
-        let downloader = self.downloader!
+        let downloader = self.downloader
         
         let results = try await withThrowingTaskGroup(of: String.self) { group in
             for url in urls {
@@ -113,15 +97,16 @@ final class DownloadTests: XCTestCase {
             return downloadedContents
         }
         
-        XCTAssertEqual(results.count, urls.count)
-        XCTAssertTrue(results.allSatisfy { !$0.isEmpty })
+        #expect(results.count == urls.count)
+        #expect(results.allSatisfy { !$0.isEmpty })
     }
     
     // MARK: - Simple Data Response Concurrent Download Tests
     
-    func testSimpleSegmentsConcurrentDownloads() async throws {
+    @Test("Simple segments concurrent downloads")
+    func simpleSegmentsConcurrentDownloads() async throws {
         let urls = M3U8TestFixtures.segmentURLs
-        let downloader = self.downloader!
+        let downloader = self.downloader
         typealias TaskResult = (name: String, data: Data)
         let results = try await withThrowingTaskGroup(of: TaskResult.self) { group in
             for url in urls {
@@ -140,50 +125,270 @@ final class DownloadTests: XCTestCase {
             return items
         }
         
-        XCTAssertEqual(results.count, urls.count)
+        #expect(results.count == urls.count)
         for result in results {
             let expectedURL = M3U8TestFixtures.baseURL.appendingPathComponent("fixtures/\(result.name)")
-            XCTAssertEqual(result.data, M3U8TestFixtures.mediaSegments[expectedURL])
+            #expect(result.data == M3U8TestFixtures.mediaSegments[expectedURL])
         }
     }
     
     // MARK: - File System Integration Tests
     
-    func testDownloadToFileSystem() async throws {
+    @Test("Download to file system")
+    func downloadToFileSystem() async throws {
         let outputFile = tempDirectory.appendingPathComponent("test.m3u8")
         let content = try await downloader.downloadContent(from: M3U8TestFixtures.mediaPlaylistURL)
         try content.write(to: outputFile, atomically: true, encoding: .utf8)
         
-        XCTAssertTrue(fileSystem.fileExists(at: outputFile))
+        #expect(fileSystem.fileExists(at: outputFile))
         let savedContent = try String(contentsOf: outputFile, encoding: .utf8)
-        XCTAssertEqual(content, savedContent)
+        #expect(content == savedContent)
     }
     
     // MARK: - Timeout Tests
     
-    func testDownloadWithTimeout() async throws {
+    @Test("Download with timeout")
+    func downloadWithTimeout() async throws {
         let customConfig = DIConfiguration(
             maxConcurrentDownloads: 5,
             downloadTimeout: 5.0
         )
         
         let customDownloader = DefaultM3U8Downloader(
-            commandExecutor: commandExecutor,
+            commandExecutor: NoopCommandExecutor(),
             configuration: customConfig,
             networkClient: mockNetworkClient
         )
         
         let content = try await customDownloader.downloadContent(from: M3U8TestFixtures.masterPlaylistURL)
-        XCTAssertFalse(content.isEmpty)
+        #expect(!content.isEmpty)
     }
     
-    func testDownloadQuickResponse() async throws {
+    @Test("Download quick response")
+    func downloadQuickResponse() async throws {
         let testURL = M3U8TestFixtures.masterPlaylistURL
         let startTime = Date()
         let content = try await downloader.downloadContent(from: testURL)
         let duration = Date().timeIntervalSince(startTime)
         
-        XCTAssertFalse(content.isEmpty)
-        XCTAssertLessThan(duration, 0.05, "Fixture-backed download should be near instant")
+        #expect(!content.isEmpty)
+        #expect(duration < 0.05, "Fixture-backed download should be near instant")
+    }
+    
+    // MARK: - Error Handling Tests
+    
+    @Test("Handle 404 client error")
+    func handle404ClientError() async throws {
+        let errorURL = M3U8TestFixtures.baseURL.appendingPathComponent("fixtures/notfound.m3u8")
+        mockNetworkClient.registerSuccess(
+            url: errorURL,
+            data: Data(),
+            statusCode: 404
+        )
+        
+        do {
+            _ = try await downloader.downloadContent(from: errorURL)
+            Issue.record("Expected NetworkError for 404 status")
+        } catch let error as NetworkError {
+            #expect(error.code == 1004 || error.code == 1006) // serverError can return 1004 or 1006
+        } catch {
+            Issue.record("Expected NetworkError, got \(type(of: error))")
+        }
+    }
+    
+    @Test("Handle 500 server error")
+    func handle500ServerError() async throws {
+        let errorURL = M3U8TestFixtures.baseURL.appendingPathComponent("fixtures/servererror.m3u8")
+        mockNetworkClient.registerSuccess(
+            url: errorURL,
+            data: Data(),
+            statusCode: 500
+        )
+        
+        do {
+            _ = try await downloader.downloadContent(from: errorURL)
+            Issue.record("Expected NetworkError for 500 status")
+        } catch let error as NetworkError {
+            #expect(error.code == 1004 || error.code == 1006) // serverError can return 1004 or 1006
+        } catch {
+            Issue.record("Expected NetworkError, got \(type(of: error))")
+        }
+    }
+    
+    @Test("Handle connection failure")
+    func handleConnectionFailure() async throws {
+        let errorURL = M3U8TestFixtures.baseURL.appendingPathComponent("fixtures/connectionfailed.m3u8")
+        mockNetworkClient.registerFailure(
+            url: errorURL,
+            error: URLError(.notConnectedToInternet)
+        )
+        
+        do {
+            _ = try await downloader.downloadContent(from: errorURL)
+            Issue.record("Expected error for connection failure")
+        } catch {
+            // Expected to throw URLError or NetworkError
+            #expect(error is URLError || error is NetworkError)
+        }
+    }
+    
+    @Test("Handle timeout error")
+    func handleTimeoutError() async throws {
+        let errorURL = M3U8TestFixtures.baseURL.appendingPathComponent("fixtures/timeout.m3u8")
+        mockNetworkClient.registerFailure(
+            url: errorURL,
+            error: URLError(.timedOut)
+        )
+        
+        do {
+            _ = try await downloader.downloadContent(from: errorURL)
+            Issue.record("Expected error for timeout")
+        } catch {
+            // Expected to throw URLError or NetworkError
+            #expect(error is URLError || error is NetworkError)
+        }
+    }
+    
+    @Test("Handle unreachable URL")
+    func handleUnreachableURL() async throws {
+        do {
+            _ = try await downloader.downloadContent(from: M3U8TestFixtures.unreachableURL)
+            Issue.record("Expected error for unreachable URL")
+        } catch {
+            // Expected to throw URLError or NetworkError
+            #expect(error is URLError || error is NetworkError)
+        }
+    }
+    
+    @Test("Handle non-200 status code in downloadRawData")
+    func handleNon200StatusInDownloadRawData() async throws {
+        let errorURL = M3U8TestFixtures.baseURL.appendingPathComponent("fixtures/forbidden.m3u8")
+        mockNetworkClient.registerSuccess(
+            url: errorURL,
+            data: Data("Forbidden".utf8),
+            statusCode: 403
+        )
+        
+        do {
+            _ = try await downloader.downloadRawData(from: errorURL)
+            Issue.record("Expected NetworkError for 403 status")
+        } catch let error as NetworkError {
+            #expect(error.code == 1004 || error.code == 1006) // serverError can return 1004 or 1006
+        } catch {
+            Issue.record("Expected NetworkError, got \(type(of: error))")
+        }
+    }
+    
+    @Test("Handle segment download failure")
+    func handleSegmentDownloadFailure() async throws {
+        let errorURL = M3U8TestFixtures.baseURL.appendingPathComponent("fixtures/failed_segment.ts")
+        mockNetworkClient.registerFailure(
+            url: errorURL,
+            error: URLError(.networkConnectionLost)
+        )
+        
+        do {
+            try await downloader.downloadSegments(
+                at: [errorURL],
+                to: tempDirectory,
+                headers: [:]
+            )
+            Issue.record("Expected error for failed segment download")
+        } catch {
+            // Expected to throw URLError or NetworkError
+            #expect(error is URLError || error is NetworkError)
+        }
+    }
+    
+    // MARK: - Concurrency Control Tests
+    
+    @Test("Respect maxConcurrentDownloads limit in segment downloads")
+    func respectMaxConcurrentDownloadsLimitInSegmentDownloads() async throws {
+        // Create a downloader with limited concurrency
+        let limitedConfig = DIConfiguration(
+            maxConcurrentDownloads: 2,
+            downloadTimeout: 5,
+            resourceTimeout: 10
+        )
+        let limitedDownloader = DefaultM3U8Downloader(
+            commandExecutor: NoopCommandExecutor(),
+            configuration: limitedConfig,
+            networkClient: mockNetworkClient
+        )
+        
+        // Create more segment URLs than the concurrency limit
+        let segmentURLs = [
+            M3U8TestFixtures.baseURL.appendingPathComponent("fixtures/segment_a.ts"),
+            M3U8TestFixtures.baseURL.appendingPathComponent("fixtures/segment_b.ts"),
+            M3U8TestFixtures.baseURL.appendingPathComponent("fixtures/segment_c.ts"),
+            M3U8TestFixtures.baseURL.appendingPathComponent("fixtures/segment_d.ts"),
+            M3U8TestFixtures.baseURL.appendingPathComponent("fixtures/segment_e.ts")
+        ]
+        
+        // Register all segments
+        for url in segmentURLs {
+            mockNetworkClient.registerSuccess(
+                url: url,
+                data: Data(repeating: 0x22, count: 1 * 1024),
+                headers: ["Content-Type": "video/MP2T"]
+            )
+        }
+        
+        // Download segments - should respect concurrency limit internally
+        try await limitedDownloader.downloadSegments(
+            at: segmentURLs,
+            to: tempDirectory,
+            headers: [:]
+        )
+        
+        // Verify all segments were downloaded
+        for url in segmentURLs {
+            let fileURL = tempDirectory.appendingPathComponent(url.lastPathComponent)
+            #expect(fileSystem.fileExists(at: fileURL), "Segment \(url.lastPathComponent) should be downloaded")
+        }
+    }
+    
+    @Test("Concurrent segment downloads respect limit")
+    func concurrentSegmentDownloadsRespectLimit() async throws {
+        // Create a downloader with limited concurrency
+        let limitedConfig = DIConfiguration(
+            maxConcurrentDownloads: 2,
+            downloadTimeout: 5,
+            resourceTimeout: 10
+        )
+        let limitedDownloader = DefaultM3U8Downloader(
+            commandExecutor: NoopCommandExecutor(),
+            configuration: limitedConfig,
+            networkClient: mockNetworkClient
+        )
+        
+        // Create more segment URLs than the concurrency limit
+        let segmentURLs = M3U8TestFixtures.segmentURLs + [
+            M3U8TestFixtures.baseURL.appendingPathComponent("fixtures/segment3.ts"),
+            M3U8TestFixtures.baseURL.appendingPathComponent("fixtures/segment4.ts"),
+            M3U8TestFixtures.baseURL.appendingPathComponent("fixtures/segment5.ts")
+        ]
+        
+        // Register additional segments
+        for url in segmentURLs.suffix(3) {
+            mockNetworkClient.registerSuccess(
+                url: url,
+                data: Data(repeating: 0x11, count: 1 * 1024),
+                headers: ["Content-Type": "video/MP2T"]
+            )
+        }
+        
+        // Download segments - should respect concurrency limit
+        try await limitedDownloader.downloadSegments(
+            at: segmentURLs,
+            to: tempDirectory,
+            headers: [:]
+        )
+        
+        // Verify all segments were downloaded
+        for url in segmentURLs {
+            let fileURL = tempDirectory.appendingPathComponent(url.lastPathComponent)
+            #expect(fileSystem.fileExists(at: fileURL), "Segment \(url.lastPathComponent) should be downloaded")
+        }
     }
 }

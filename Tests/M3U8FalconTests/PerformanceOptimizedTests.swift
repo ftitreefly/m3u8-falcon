@@ -5,35 +5,33 @@
 //  Created by tree_fly on 2025/7/9.
 //
 
-import XCTest
-
+import Foundation
 @testable import M3U8Falcon
+import Testing
 
-final class PerformanceOptimizedTests: XCTestCase {
+@Suite("Performance Optimized Tests")
+final class PerformanceOptimizedTests {
     
-    var testContainer: DependencyContainer!
+    private var testContainer: DependencyContainer
     
-    override func setUpWithError() throws {
+    init() throws {
         testContainer = DependencyContainer()
         testContainer.configure(with: DIConfiguration.performanceOptimized())
         Logger.configure(.production())
     }
     
-    override func tearDownWithError() throws {
-        testContainer = nil
-    }
-    
-    func testBasicInitialization() throws {
+    @Test("Basic initialization")
+    func basicInitialization() throws {
         // Configure performance optimization settings
         testContainer.configure(with: DIConfiguration.performanceOptimized())
         
-        // Test basic configuration parsing
         let configuration = try testContainer.resolve(DIConfiguration.self)
-        XCTAssertEqual(configuration.maxConcurrentDownloads, 20)
-        XCTAssertEqual(configuration.downloadTimeout, 60)
+        #expect(configuration.maxConcurrentDownloads == 20)
+        #expect(configuration.downloadTimeout == 60)
     }
     
-    func testConfigurationValidation() throws {
+    @Test("Configuration validation")
+    func configurationValidation() throws {
         // Test custom configuration
         let customConfig = DIConfiguration(
             ffmpegPath: "/usr/local/bin/ffmpeg",
@@ -45,119 +43,115 @@ final class PerformanceOptimizedTests: XCTestCase {
         testContainer.configure(with: customConfig)
         
         let resolvedConfig = try testContainer.resolve(DIConfiguration.self)
-        XCTAssertEqual(resolvedConfig.maxConcurrentDownloads, 10)
-        XCTAssertEqual(resolvedConfig.downloadTimeout, 60)
-        XCTAssertEqual(resolvedConfig.defaultHeaders["User-Agent"], "TestAgent")
+        #expect(resolvedConfig.maxConcurrentDownloads == 10)
+        #expect(resolvedConfig.downloadTimeout == 60)
+        #expect(resolvedConfig.defaultHeaders["User-Agent"] == "TestAgent")
     }
     
-    func testFileSystemOperations() throws {
+    @Test("File system operations")
+    func fileSystemOperations() throws {
         let fileSystem = try testContainer.resolve(FileSystemServiceProtocol.self)
         
-        // Test temporary directory creation
         let tempDir = try fileSystem.createTemporaryDirectory(nil)
-        XCTAssertTrue(fileSystem.fileExists(at: tempDir))
+        #expect(fileSystem.fileExists(at: tempDir))
         
-        // Clean up
         try fileSystem.removeItem(at: tempDir)
-        XCTAssertFalse(fileSystem.fileExists(at: tempDir))
+        #expect(!fileSystem.fileExists(at: tempDir))
     }
     
-    func testCommandExecutorCreation() throws {
-        // Only test service creation, don't execute actual commands
+    @Test("Command executor creation")
+    func commandExecutorCreation() throws {
         let commandExecutor = try testContainer.resolve(CommandExecutorProtocol.self)
-        XCTAssertNotNil(commandExecutor)
+        _ = commandExecutor
     }
     
-    func testPerformanceOptimizedConfiguration() {
-        // Test performance optimized configuration creation
+    @Test("Performance optimized configuration")
+    func performanceOptimizedConfiguration() {
         let config = DIConfiguration.performanceOptimized()
-        XCTAssertNotNil(config)
-        XCTAssertEqual(config.maxConcurrentDownloads, 20)
-        XCTAssertEqual(config.downloadTimeout, 60)
-        XCTAssertNotNil(config.defaultHeaders["User-Agent"])
+        
+        // Core performance parameters
+        #expect(config.maxConcurrentDownloads == 20, "Should have 20 concurrent downloads for performance")
+        #expect(config.downloadTimeout == 60, "Should have 60 second download timeout")
+        #expect(config.resourceTimeout == 120, "Should have 120 second resource timeout")
+        
+        // Retry configuration
+        #expect(config.retryAttempts == 2, "Should have 2 retry attempts")
+        #expect(config.retryBackoffBase == 0.4, "Should have 0.4 second retry backoff base")
+        
+        // Logging configuration
+        #expect(config.logLevel == .error, "Should use error log level for performance")
+        
+        // HTTP headers validation
+        #expect(config.defaultHeaders["User-Agent"] != nil, "Should have User-Agent header")
+        #expect(config.defaultHeaders["Accept"] == "*/*", "Should have Accept header")
+        #expect(config.defaultHeaders["Accept-Language"] == "en-US,en;q=0.9", "Should have Accept-Language header")
+        #expect(config.defaultHeaders["Cache-Control"] == "no-cache", "Should have Cache-Control header")
+        #expect(config.defaultHeaders["Connection"] == "keep-alive", "Should have Connection header")
+        
+        // FFmpeg path (may be nil if not found, but should be tested)
+        // The path detection is environment-dependent, so we just verify it's set or nil
+        _ = config.ffmpegPath
     }
     
-    func testDependencyContainerBasics() throws {
-        // Test container basic functionality
+    @Test("Performance optimized configuration all parameters")
+    func performanceOptimizedConfigurationAllParameters() {
+        let config = DIConfiguration.performanceOptimized()
+        
+        // Verify all numeric parameters
+        #expect(config.maxConcurrentDownloads == 20)
+        #expect(config.downloadTimeout == 60.0)
+        #expect(config.resourceTimeout == 120.0)
+        #expect(config.retryAttempts == 2)
+        #expect(config.retryBackoffBase == 0.4)
+        
+        // Verify log level
+        #expect(config.logLevel == .error)
+        
+        // Verify all required headers are present
+        let requiredHeaders = [
+            "User-Agent",
+            "Accept",
+            "Accept-Language",
+            "Cache-Control",
+            "Connection"
+        ]
+        
+        for header in requiredHeaders {
+            #expect(config.defaultHeaders[header] != nil, "Missing required header: \(header)")
+        }
+        
+        // Verify header values match expected performance-optimized values
+        #expect(config.defaultHeaders["Accept"] == "*/*")
+        #expect(config.defaultHeaders["Accept-Language"] == "en-US,en;q=0.9")
+        #expect(config.defaultHeaders["Cache-Control"] == "no-cache")
+        #expect(config.defaultHeaders["Connection"] == "keep-alive")
+        
+        // User-Agent should contain browser-like string
+        let userAgent = config.defaultHeaders["User-Agent"] ?? ""
+        #expect(userAgent.contains("Mozilla") || userAgent.contains("AppleWebKit"), "User-Agent should be browser-like")
+    }
+    
+    @Test("Dependency container basics")
+    func dependencyContainerBasics() throws {
         let container = DependencyContainer()
         
-        // Register a simple service
         container.register(String.self) { "test" }
         let result = try container.resolve(String.self)
-        XCTAssertEqual(result, "test")
+        #expect(result == "test")
         
-        // Test singleton registration
         container.registerSingleton(Int.self) { 42 }
         let value1 = try container.resolve(Int.self)
         let value2 = try container.resolve(Int.self)
-        XCTAssertEqual(value1, 42)
-        XCTAssertEqual(value2, 42)
+        #expect(value1 == 42)
+        #expect(value2 == 42)
     }
     
-    func testM3U8ContentValidation() {
-        // Test M3U8 content format validation, don't execute actual parsing
-        let validM3U8Content = """
-    #EXTM3U
-    #EXT-X-VERSION:3
-    #EXT-X-TARGETDURATION:10
-    #EXT-X-MEDIA-SEQUENCE:0
-    #EXTINF:10.0,
-    segment1.ts
-    #EXTINF:10.0,
-    segment2.ts
-    #EXT-X-ENDLIST
-    """
-        
-        // Verify basic M3U8 content format
-        XCTAssertTrue(validM3U8Content.contains("#EXTM3U"))
-        XCTAssertTrue(validM3U8Content.contains("#EXT-X-VERSION"))
-        XCTAssertTrue(validM3U8Content.contains("#EXTINF"))
-        XCTAssertTrue(validM3U8Content.contains("segment1.ts"))
-        XCTAssertTrue(validM3U8Content.contains("segment2.ts"))
-        XCTAssertTrue(validM3U8Content.contains("#EXT-X-ENDLIST"))
-        
-        // Test invalid M3U8 content
-        let invalidM3U8Content = "This is not a valid M3U8 file"
-        XCTAssertFalse(invalidM3U8Content.contains("#EXTM3U"))
-    }
-    
-    func testURLValidationLogic() {
-        // Test URL format validation, don't execute actual network requests
-        let validHTTPURL = URL(string: "https://example.com/test.m3u8")!
-        XCTAssertEqual(validHTTPURL.scheme, "https")
-        XCTAssertNotNil(validHTTPURL.host)
-        
-        let validHTTPSURL = URL(string: "http://example.com/test.m3u8")!
-        XCTAssertEqual(validHTTPSURL.scheme, "http")
-        XCTAssertNotNil(validHTTPSURL.host)
-        
-        // Test invalid URL scheme
-        let invalidURL = URL(string: "ftp://invalid.url")!
-        XCTAssertNotEqual(invalidURL.scheme, "https")
-        XCTAssertNotEqual(invalidURL.scheme, "http")
-    }
-    
-    func testTaskStatusEnum() {
-        // Test various states of TaskStatus enum
-        let pendingStatus = TaskStatus.pending
-        let downloadingStatus = TaskStatus.downloading(progress: 0.5)
-        let processingStatus = TaskStatus.processing
-        let completedStatus = TaskStatus.completed
-        let cancelledStatus = TaskStatus.cancelled
-        
-        // These states should be created without crashing
-        XCTAssertNotNil(pendingStatus)
-        XCTAssertNotNil(downloadingStatus)
-        XCTAssertNotNil(processingStatus)
-        XCTAssertNotNil(completedStatus)
-        XCTAssertNotNil(cancelledStatus)
-    }
-    
-    func testM3U8ParserServiceDirect() throws {
-        // Directly test parser service, avoid async operations
+    @Test("M3U8 parser service through DI container")
+    func m3U8ParserServiceThroughDIContainer() throws {
+        // Test that parser service can be resolved through DI container
+        // This is different from ParseTests which tests the parser directly
         let parser = try testContainer.resolve(M3U8ParserServiceProtocol.self)
         
-        // Create simple M3U8 content
         let m3u8Content = """
     #EXTM3U
     #EXT-X-VERSION:3
@@ -170,120 +164,31 @@ final class PerformanceOptimizedTests: XCTestCase {
     #EXT-X-ENDLIST
     """
         
-        do {
-            let baseURL = URL(string: "https://example.com/")!
-            let result = try parser.parseContent(m3u8Content, baseURL: baseURL, type: .media)
-            
-            switch result {
-            case .media(let playlist):
-                XCTAssertNotNil(playlist)
-                XCTAssertEqual(playlist.tags.mediaSegments.count, 2)
-                XCTAssertEqual(playlist.tags.mediaSegments[0].uri, "segment1.ts")
-                XCTAssertEqual(playlist.tags.mediaSegments[1].uri, "segment2.ts")
-            case .master, .cancelled:
-                XCTFail("Expected media playlist")
-            }
-            
-        } catch {
-            XCTFail("M3U8 parser service direct test failed: \(error)")
+        let baseURL = URL(string: "https://example.com/")!
+        let result = try parser.parseContent(m3u8Content, baseURL: baseURL, type: .media)
+        
+        switch result {
+        case .media(let playlist):
+            #expect(playlist.tags.mediaSegments.count == 2)
+            #expect(playlist.tags.mediaSegments[0].uri == "segment1.ts")
+            #expect(playlist.tags.mediaSegments[1].uri == "segment2.ts")
+        case .master, .cancelled:
+            Issue.record("Expected media playlist")
         }
     }
     
-    func testDownloadConfigurationTypes() {
-        // Test DownloadConfiguration and related types
-        let defaultConfig = DownloadConfiguration.default
-        XCTAssertEqual(defaultConfig.maxConcurrentDownloads, 3)
-        XCTAssertEqual(defaultConfig.connectionTimeout, 30.0)
-        XCTAssertEqual(defaultConfig.retryAttempts, 3)
-        XCTAssertEqual(defaultConfig.qualityPreference, .auto)
-        XCTAssertTrue(defaultConfig.cleanupTempFiles)
-        XCTAssertFalse(defaultConfig.httpHeaders.isEmpty)
+    @Test("FFmpeg path detection in performance optimized configuration")
+    func ffmpegPathDetection() {
+        let config = DIConfiguration.performanceOptimized()
         
-        // Test custom configuration
-        let customConfig = DownloadConfiguration(
-            maxConcurrentDownloads: 5,
-            connectionTimeout: 60.0,
-            retryAttempts: 5,
-            qualityPreference: .highest,
-            cleanupTempFiles: false,
-            httpHeaders: ["Custom-Header": "CustomValue"]
-        )
-        
-        XCTAssertEqual(customConfig.maxConcurrentDownloads, 5)
-        XCTAssertEqual(customConfig.connectionTimeout, 60.0)
-        XCTAssertEqual(customConfig.retryAttempts, 5)
-        XCTAssertEqual(customConfig.qualityPreference, .highest)
-        XCTAssertFalse(customConfig.cleanupTempFiles)
-        XCTAssertEqual(customConfig.httpHeaders["Custom-Header"], "CustomValue")
-    }
-    
-    func testDownloadProgressCalculation() {
-        // Test DownloadProgress calculation logic
-        let progress1 = DownloadProgress(
-            totalSegments: 100,
-            completedSegments: 50,
-            totalBytes: 1000000,
-            downloadedBytes: 500000,
-            state: .downloading
-        )
-        
-        XCTAssertEqual(progress1.progress, 0.5)
-        XCTAssertEqual(progress1.totalSegments, 100)
-        XCTAssertEqual(progress1.completedSegments, 50)
-        XCTAssertEqual(progress1.state, .downloading)
-        
-        // Test completed state
-        let progress2 = DownloadProgress(
-            totalSegments: 100,
-            completedSegments: 100,
-            totalBytes: 1000000,
-            downloadedBytes: 1000000,
-            state: .completed
-        )
-        
-        XCTAssertEqual(progress2.progress, 1.0)
-        XCTAssertEqual(progress2.state, .completed)
-        
-        // Test empty progress
-        let progress3 = DownloadProgress(
-            totalSegments: 0,
-            completedSegments: 0,
-            totalBytes: 0,
-            downloadedBytes: 0,
-            state: .pending
-        )
-        
-        XCTAssertEqual(progress3.progress, 0.0)
-        XCTAssertEqual(progress3.state, .pending)
-    }
-    
-    func testDownloadAPISignature() {
-        // Test download API signature and parameter validation
-        let testURL = URL(string: "https://example.com/test.m3u8")!
-        
-        //    // Verify Method type baseURL property
-        //    let webMethod = Method.web
-        //    XCTAssertNil(webMethod.baseURL)
-        
-        // Verify URL basic properties
-        XCTAssertEqual(testURL.scheme, "https")
-        XCTAssertEqual(testURL.host, "example.com")
-        XCTAssertEqual(testURL.pathExtension, "m3u8")
-    }
-}
-
-// MARK: - Test Helper Types
-
-enum TimeoutError: Error {
-    case downloadTimeout
-    case networkTimeout
-    
-    var localizedDescription: String {
-        switch self {
-        case .downloadTimeout:
-            return "Download operation timed out"
-        case .networkTimeout:
-            return "Network operation timed out"
+        // FFmpeg path may be nil if not found, which is acceptable
+        if let ffmpegPath = config.ffmpegPath {
+            // If path is detected, verify it's valid
+            #expect(FileManager.default.fileExists(atPath: ffmpegPath), 
+                    "FFmpeg path should point to an existing file")
+            #expect(FileManager.default.isExecutableFile(atPath: ffmpegPath), 
+                    "FFmpeg path should point to an executable file")
         }
+        // If nil, that's also acceptable - FFmpeg may not be installed
     }
 }

@@ -24,15 +24,13 @@ import FoundationNetworking
 /// ## Features
 /// - Exponential backoff retry
 /// - Connection pool management
-/// - Performance monitoring
 /// - Thread-safe operations
 /// 
 /// ## Usage Example
 /// ```swift
 /// let client = EnhancedNetworkClient(
 ///     configuration: .performanceOptimized(),
-///     retryStrategy: ExponentialBackoffRetryStrategy(),
-///     monitor: PerformanceMonitor()
+///     retryStrategy: ExponentialBackoffRetryStrategy()
 /// )
 /// 
 /// let request = URLRequest(url: url)
@@ -48,9 +46,6 @@ public actor EnhancedNetworkClient: NetworkClientProtocol {
     /// Retry strategy for failed requests
     private let retryStrategy: RetryStrategy
     
-    /// Optional performance monitor
-    private let monitor: PerformanceMonitorProtocol?
-    
     /// Request counter for tracking
     private var requestCount: Int = 0
     
@@ -59,11 +54,9 @@ public actor EnhancedNetworkClient: NetworkClientProtocol {
     /// - Parameters:
     ///   - configuration: Configuration settings for the client
     ///   - retryStrategy: Strategy for retrying failed requests (default: exponential backoff)
-    ///   - monitor: Optional performance monitor for collecting metrics
     public init(
         configuration: DIConfiguration,
-        retryStrategy: RetryStrategy = ExponentialBackoffRetryStrategy(),
-        monitor: PerformanceMonitorProtocol? = nil
+        retryStrategy: RetryStrategy = ExponentialBackoffRetryStrategy()
     ) {
         // Configure URLSession with optimized settings
         let sessionConfig = URLSessionConfiguration.default
@@ -101,7 +94,6 @@ public actor EnhancedNetworkClient: NetworkClientProtocol {
         self.session = URLSession(configuration: sessionConfig)
         self.configuration = configuration
         self.retryStrategy = retryStrategy
-        self.monitor = monitor
     }
     
     /// Performs a network request with automatic retry logic
@@ -133,25 +125,11 @@ public actor EnhancedNetworkClient: NetworkClientProtocol {
         
         for attempt in 0..<maxAttempts {
             do {
-                // Track request start time
-                let startTime = Date()
-                
                 // Increment request counter
                 incrementRequestCount()
                 
                 // Execute the request
                 let (data, response) = try await session.data(for: request)
-                
-                // Calculate duration
-                let duration = Date().timeIntervalSince(startTime)
-                
-                // Record metrics
-                await recordMetrics(
-                    duration: duration,
-                    dataSize: data.count,
-                    attempt: attempt,
-                    success: true
-                )
                 
                 // Validate the response
                 try validateResponse(response, data: data, url: request.url!)
@@ -179,12 +157,6 @@ public actor EnhancedNetworkClient: NetworkClientProtocol {
                 guard attempt < maxAttempts - 1,
                       retryStrategy.shouldRetry(error: error, attempt: attempt) else {
                     // No more retries, throw the error
-                    await recordMetrics(
-                        duration: 0,
-                        dataSize: 0,
-                        attempt: attempt,
-                        success: false
-                    )
                     break
                 }
                 
@@ -237,55 +209,6 @@ public actor EnhancedNetworkClient: NetworkClientProtocol {
         }
     }
     
-    /// Records performance metrics
-    /// 
-    /// - Parameters:
-    ///   - duration: Request duration in seconds
-    ///   - dataSize: Size of response data in bytes
-    ///   - attempt: The attempt number
-    ///   - success: Whether the request was successful
-    private func recordMetrics(
-        duration: TimeInterval,
-        dataSize: Int,
-        attempt: Int,
-        success: Bool
-    ) async {
-        guard let monitor = monitor else { return }
-        
-        await monitor.record(
-            name: "network.request.duration",
-            value: duration,
-            unit: "seconds"
-        )
-        
-        await monitor.record(
-            name: "network.request.size",
-            value: Double(dataSize),
-            unit: "bytes"
-        )
-        
-        await monitor.record(
-            name: "network.request.attempts",
-            value: Double(attempt + 1),
-            unit: "count"
-        )
-        
-        if duration > 0 {
-            let speed = Double(dataSize) / duration
-            await monitor.record(
-                name: "network.download.speed",
-                value: speed,
-                unit: "bytes/sec"
-            )
-        }
-        
-        await monitor.record(
-            name: success ? "network.request.success" : "network.request.failure",
-            value: 1.0,
-            unit: "count"
-        )
-    }
-    
     /// Increments the request counter
     private func incrementRequestCount() {
         requestCount += 1
@@ -302,20 +225,4 @@ public actor EnhancedNetworkClient: NetworkClientProtocol {
     public func resetRequestCount() {
         requestCount = 0
     }
-}
-
-// MARK: - Performance Monitor Protocol
-
-/// Protocol for monitoring network performance
-/// 
-/// Implementations of this protocol can collect and analyze performance
-/// metrics from network operations.
-public protocol PerformanceMonitorProtocol: Sendable {
-    /// Records a performance metric
-    /// 
-    /// - Parameters:
-    ///   - name: The metric name
-    ///   - value: The metric value
-    ///   - unit: The unit of measurement
-    func record(name: String, value: Double, unit: String) async
 }

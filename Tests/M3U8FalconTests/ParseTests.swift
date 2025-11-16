@@ -6,26 +6,22 @@
 //
 
 import Foundation
-import XCTest
-
 @testable import M3U8Falcon
+import Testing
 
-final class ParseTests: XCTestCase {
+@Suite("Parse Tests")
+final class ParseTests {
     
-    var parser: M3U8Parser!
+    private var parser: M3U8Parser
     
-    override func setUpWithError() throws {
+    init() {
         parser = M3U8Parser()
-    }
-    
-    override func tearDownWithError() throws {
-        parser = nil
     }
     
     // MARK: - M3U8Parser Tests
     
-    /// Test parsing Master Playlist
-    func testParseMasterPlaylist() throws {
+    @Test("Parse master playlist")
+    func parseMasterPlaylist() throws {
         let masterPlaylistContent = """
         #EXTM3U
         #EXT-X-VERSION:3
@@ -44,25 +40,24 @@ final class ParseTests: XCTestCase {
         
         switch result {
         case .master(let masterPlaylist):
-            XCTAssertEqual(masterPlaylist.baseUrl, baseUrl)
-            XCTAssertNotNil(masterPlaylist.tags.versionTag)
-            XCTAssertEqual(masterPlaylist.tags.versionTag?.value, 3)
-            XCTAssertEqual(masterPlaylist.tags.streamTags.count, 3)
+            #expect(masterPlaylist.baseUrl == baseUrl)
+            #expect(masterPlaylist.tags.versionTag != nil)
+            #expect(masterPlaylist.tags.versionTag?.value == 3)
+            #expect(masterPlaylist.tags.streamTags.count == 3)
             
-            // Verify first stream tag
             let firstStream = masterPlaylist.tags.streamTags[0]
-            XCTAssertTrue(firstStream.text.contains("BANDWIDTH=1280000"))
-            XCTAssertTrue(firstStream.text.contains("RESOLUTION=640x360"))
+            #expect(firstStream.text.contains("BANDWIDTH=1280000"))
+            #expect(firstStream.text.contains("RESOLUTION=640x360"))
             
         case .media:
-            XCTFail("Expected master playlist but got media playlist")
+            Issue.record("Expected master playlist but got media playlist")
         case .cancelled:
-            XCTFail("Parsing was cancelled")
+            Issue.record("Parsing was cancelled")
         }
     }
     
-    /// Test parsing Media Playlist
-    func testParseMediaPlaylist() throws {
+    @Test("Parse media playlist")
+    func parseMediaPlaylist() throws {
         let mediaPlaylistContent = """
         #EXTM3U
         #EXT-X-VERSION:3
@@ -85,42 +80,42 @@ final class ParseTests: XCTestCase {
         
         switch result {
         case .master:
-            XCTFail("Expected media playlist but got master playlist")
+            Issue.record("Expected media playlist but got master playlist")
         case .media(let mediaPlaylist):
-            XCTAssertEqual(mediaPlaylist.baseUrl, baseUrl)
-            XCTAssertNotNil(mediaPlaylist.tags.targetDurationTag)
-            XCTAssertEqual(mediaPlaylist.tags.targetDurationTag.value, 10)
-            XCTAssertNotNil(mediaPlaylist.tags.versionTag)
-            XCTAssertEqual(mediaPlaylist.tags.versionTag?.value, 3)
-            XCTAssertNotNil(mediaPlaylist.tags.mediaSequence)
-            XCTAssertEqual(mediaPlaylist.tags.mediaSequence?.value, 0)
-            XCTAssertEqual(mediaPlaylist.tags.mediaSegments.count, 3)
+            #expect(mediaPlaylist.baseUrl == baseUrl)
+            #expect(mediaPlaylist.tags.targetDurationTag.value == 10)
+            #expect(mediaPlaylist.tags.versionTag != nil)
+            #expect(mediaPlaylist.tags.versionTag?.value == 3)
+            #expect(mediaPlaylist.tags.mediaSequence != nil)
+            #expect(mediaPlaylist.tags.mediaSequence?.value == 0)
+            #expect(mediaPlaylist.tags.mediaSegments.count == 3)
             
-            // Verify first segment
             let firstSegment = mediaPlaylist.tags.mediaSegments[0]
-            XCTAssertEqual(firstSegment.value, 9.009, accuracy: 0.001)
+            #expect(abs(firstSegment.value - 9.009) < 0.001)
             
         case .cancelled:
-            XCTFail("Parsing was cancelled")
+            Issue.record("Parsing was cancelled")
         }
     }
     
-    /// Test parsing empty playlist
-    func testParseEmptyPlaylist() throws {
+    @Test("Parse empty playlist")
+    func parseEmptyPlaylist() throws {
         let emptyContent = ""
         let baseUrl = URL(string: "https://example.com/")!
         let params = M3U8Parser.Params(playlist: emptyContent, playlistType: .media, baseUrl: baseUrl)
         
-        // Empty playlist should throw error
-        XCTAssertThrowsError(try parser.parse(params: params)) { error in
-            if let parserError = error as? ParsingError {
-                XCTAssertTrue(parserError.message.contains("Failed to build"))
-            }
+        do {
+            _ = try parser.parse(params: params)
+            Issue.record("Empty playlist should throw error")
+        } catch let parserError as ParsingError {
+            #expect(parserError.message.contains("Failed to build"))
+        } catch {
+            Issue.record("Expected ParsingError, got \(type(of: error))")
         }
     }
     
-    /// Test parsing invalid format playlist
-    func testParseInvalidPlaylist() throws {
+    @Test("Parse invalid playlist")
+    func parseInvalidPlaylist() throws {
         let invalidContent = """
         This is not a valid M3U8 content
         It does not contain proper tags
@@ -129,16 +124,18 @@ final class ParseTests: XCTestCase {
         let baseUrl = URL(string: "https://example.com/")!
         let params = M3U8Parser.Params(playlist: invalidContent, playlistType: .media, baseUrl: baseUrl)
         
-        // Invalid format should throw error or return build failure
-        XCTAssertThrowsError(try parser.parse(params: params)) { error in
-            if let parserError = error as? ParsingError {
-                XCTAssertTrue(parserError.message.contains("Failed to build"))
-            }
+        do {
+            _ = try parser.parse(params: params)
+            Issue.record("Invalid format should throw error")
+        } catch let parserError as ParsingError {
+            #expect(parserError.message.contains("Failed to build"))
+        } catch {
+            Issue.record("Expected ParsingError, got \(type(of: error))")
         }
     }
     
-    /// Test cancel functionality
-    func testParserCancel() throws {
+    @Test("Parser cancel")
+    func parserCancel() throws {
         let longPlaylistContent = """
         #EXTM3U
         #EXT-X-VERSION:3
@@ -157,15 +154,14 @@ final class ParseTests: XCTestCase {
         
         switch result {
         case .cancelled:
-            // Expected result
             break
         case .master, .media:
-            XCTFail("Parsing should be cancelled")
+            Issue.record("Parsing should be cancelled")
         }
     }
     
-    /// Test reset functionality
-    func testParserReset() throws {
+    @Test("Parser reset")
+    func parserReset() throws {
         // First cancel the parser
         parser.cancel()
         
@@ -176,19 +172,15 @@ final class ParseTests: XCTestCase {
         
         let cancelledResult = try parser.parse(params: cancelledParams)
         
-        // Verify parsing was cancelled
         switch cancelledResult {
         case .cancelled:
-            // Expected result
             break
         case .master, .media:
-            XCTFail("Parsing should be cancelled")
+            Issue.record("Parsing should be cancelled")
         }
         
-        // Reset the parser
         parser.reset()
         
-        // Now parsing should work normally
         let validContent = """
         #EXTM3U
         #EXT-X-VERSION:3
@@ -201,17 +193,16 @@ final class ParseTests: XCTestCase {
         
         switch result {
         case .master:
-            // Expected result - parsing successful
             break
         case .media:
-            XCTFail("Expected master playlist")
+            Issue.record("Expected master playlist")
         case .cancelled:
-            XCTFail("Parsing should not be cancelled because it was reset")
+            Issue.record("Parsing should not be cancelled because it was reset")
         }
     }
     
-    /// Test media playlist with encryption key
-    func testParseMediaPlaylistWithKey() throws {
+    @Test("Parse media playlist with key")
+    func parseMediaPlaylistWithKey() throws {
         let mediaPlaylistWithKey = """
         #EXTM3U
         #EXT-X-VERSION:3
@@ -232,19 +223,19 @@ final class ParseTests: XCTestCase {
         
         switch result {
         case .media(let mediaPlaylist):
-            XCTAssertEqual(mediaPlaylist.tags.keySegments.count, 1)
+            #expect(mediaPlaylist.tags.keySegments.count == 1)
             let keySegment = mediaPlaylist.tags.keySegments[0]
-            XCTAssertTrue(keySegment.text.contains("METHOD=AES-128"))
-            XCTAssertTrue(keySegment.text.contains("URI=\"https://example.com/key.key\""))
+            #expect(keySegment.text.contains("METHOD=AES-128"))
+            #expect(keySegment.text.contains("URI=\"https://example.com/key.key\""))
         case .master:
-            XCTFail("Expected media playlist")
+            Issue.record("Expected media playlist")
         case .cancelled:
-            XCTFail("Parsing was cancelled")
+            Issue.record("Parsing was cancelled")
         }
     }
     
-    /// Test master playlist with multimedia tags
-    func testParseMasterPlaylistWithMedia() throws {
+    @Test("Parse master playlist with media")
+    func parseMasterPlaylistWithMedia() throws {
         let masterWithMedia = """
         #EXTM3U
         #EXT-X-VERSION:4
@@ -261,39 +252,34 @@ final class ParseTests: XCTestCase {
         
         switch result {
         case .master(let masterPlaylist):
-            // Verify version tag
-            XCTAssertNotNil(masterPlaylist.tags.versionTag)
-            XCTAssertEqual(masterPlaylist.tags.versionTag?.value, 4)
+            #expect(masterPlaylist.tags.versionTag != nil)
+            #expect(masterPlaylist.tags.versionTag?.value == 4)
             
-            // Verify media tag parsing
-            XCTAssertEqual(masterPlaylist.tags.mediaTags.count, 2)
+            #expect(masterPlaylist.tags.mediaTags.count == 2)
             
-            // Verify first audio media tag
             let firstMedia = masterPlaylist.tags.mediaTags[0]
-            XCTAssertTrue(firstMedia.text.contains("TYPE=AUDIO"))
-            XCTAssertTrue(firstMedia.text.contains("GROUP-ID=\"audio\""))
-            XCTAssertTrue(firstMedia.text.contains("LANGUAGE=\"en\""))
+            #expect(firstMedia.text.contains("TYPE=AUDIO"))
+            #expect(firstMedia.text.contains("GROUP-ID=\"audio\""))
+            #expect(firstMedia.text.contains("LANGUAGE=\"en\""))
             
-            // Verify second audio media tag
             let secondMedia = masterPlaylist.tags.mediaTags[1]
-            XCTAssertTrue(secondMedia.text.contains("TYPE=AUDIO"))
-            XCTAssertTrue(secondMedia.text.contains("LANGUAGE=\"es\""))
+            #expect(secondMedia.text.contains("TYPE=AUDIO"))
+            #expect(secondMedia.text.contains("LANGUAGE=\"es\""))
             
-            // Verify stream tag parsing (should now parse correctly because it includes RESOLUTION)
-            XCTAssertEqual(masterPlaylist.tags.streamTags.count, 1)
+            #expect(masterPlaylist.tags.streamTags.count == 1)
             let streamTag = masterPlaylist.tags.streamTags[0]
-            XCTAssertTrue(streamTag.text.contains("BANDWIDTH=1280000"))
-            XCTAssertTrue(streamTag.text.contains("RESOLUTION=640x360"))
+            #expect(streamTag.text.contains("BANDWIDTH=1280000"))
+            #expect(streamTag.text.contains("RESOLUTION=640x360"))
             
         case .media:
-            XCTFail("Expected master playlist")
+            Issue.record("Expected master playlist")
         case .cancelled:
-            XCTFail("Parsing was cancelled")
+            Issue.record("Parsing was cancelled")
         }
     }
     
-    /// Test parser performance
-    func testParserPerformance() throws {
+    @Test("Parser performance with large playlist")
+    func parserPerformance() throws {
         // Create a media playlist with many segments
         let segmentsPart = String(repeating: "#EXTINF:9.009,\nfileSequence.ts\n", count: 500)
         let largeMediaPlaylist = """
@@ -308,29 +294,20 @@ final class ParseTests: XCTestCase {
         let baseUrl = URL(string: "https://example.com/")!
         let params = M3U8Parser.Params(playlist: largeMediaPlaylist, playlistType: .media, baseUrl: baseUrl)
         
-        // Performance test
-        measure {
-            do {
-                let result = try parser.parse(params: params)
-                switch result {
-                case .media(let mediaPlaylist):
-                    // Verify parsing result is correct
-                    XCTAssertEqual(mediaPlaylist.tags.mediaSegments.count, 500)
-                case .master:
-                    XCTFail("Expected media playlist")
-                case .cancelled:
-                    XCTFail("Parsing was cancelled")
-                }
-                // Reset parser state after each test
-                parser.reset()
-            } catch {
-                XCTFail("Parsing failed: \(error)")
-            }
+        let result = try parser.parse(params: params)
+        switch result {
+        case .media(let mediaPlaylist):
+            #expect(mediaPlaylist.tags.mediaSegments.count == 500)
+        case .master:
+            Issue.record("Expected media playlist")
+        case .cancelled:
+            Issue.record("Parsing was cancelled")
         }
+        parser.reset()
     }
     
-    /// Test support for different PlaylistTypes
-    func testDifferentPlaylistTypes() throws {
+    @Test("Different playlist types")
+    func differentPlaylistTypes() throws {
         let mediaContent = """
         #EXTM3U
         #EXT-X-VERSION:3
@@ -349,12 +326,11 @@ final class ParseTests: XCTestCase {
             
             switch result {
             case .media(let mediaPlaylist):
-                XCTAssertEqual(mediaPlaylist.tags.mediaSegments.count, 1)
-                // \(playlistType) type parsing successful
+                #expect(mediaPlaylist.tags.mediaSegments.count == 1)
             case .master:
-                XCTFail("For \(playlistType) type, expected media playlist")
+                Issue.record("For \(playlistType) type, expected media playlist")
             case .cancelled:
-                XCTFail("Parsing was cancelled")
+                Issue.record("Parsing was cancelled")
             }
             
             parser.reset()
