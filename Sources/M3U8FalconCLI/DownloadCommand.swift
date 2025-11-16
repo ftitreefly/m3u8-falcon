@@ -106,10 +106,10 @@ struct DownloadCommand: AsyncParsableCommand {
     ///   - `ExitCode.failure` if URL is invalid or download fails
     ///   - Various network and file system errors during download
     mutating func run() async throws {
-        try await validateFFmpegAvailability()
-
-        // Ensure DI is configured (idempotent)
+        // Ensure DI is configured (idempotent) - must be called before validateFFmpegAvailability
         await M3U8Falcon.initialize()
+        
+        try await validateFFmpegAvailability()
 
         let outputDirectory = await resolveOutputDirectory()
             
@@ -142,11 +142,25 @@ struct DownloadCommand: AsyncParsableCommand {
                 key: key,
                 iv: iv
             )
-            if verbose { OutputFormatter.printSuccess("Download completed!") }
+            if verbose { 
+                OutputFormatter.printSuccess("Download completed!")
+                await printPerformanceMetrics()
+            }
         } catch {
             if let tfErr = error as? (any M3U8FalconError) {
                 let suggestion = tfErr.recoverySuggestion ?? ""
-                OutputFormatter.printError("Download failed [\(tfErr.code)]: \(tfErr.localizedDescription)\(suggestion.isEmpty ? "" : " | Suggestion: \(suggestion)")")
+                var errorMessage = "Download failed [\(tfErr.code)]: \(tfErr.localizedDescription)"
+                
+                // Include underlying error details if available
+                if let underlying = tfErr.underlyingError {
+                    errorMessage += " | Cause: \(underlying.localizedDescription)"
+                }
+                
+                if !suggestion.isEmpty {
+                    errorMessage += " | Suggestion: \(suggestion)"
+                }
+                
+                OutputFormatter.printError(errorMessage)
             } else {
                 OutputFormatter.printError("Download failed: \(error.localizedDescription)")
             }
@@ -172,6 +186,23 @@ struct OutputFormatter {
     
     static func printWarning(_ message: String) {
         print("⚠️  \(message)")
+    }
+    
+    /// Prints formatted performance metrics
+    static func printPerformanceMetrics(_ metrics: PerformanceMetrics) {
+        print("")
+        print("📊 Performance Metrics:")
+        print("  • Completed Tasks: \(metrics.completedTasks)")
+        print("  • Active Tasks: \(metrics.activeTasks)")
+        
+        if metrics.completedTasks > 0 {
+            print("  • Average Download Time: \(String(format: "%.2f", metrics.averageDownloadTime))s")
+            print("  • Average Processing Time: \(String(format: "%.2f", metrics.averageProcessingTime))s")
+            print("  • Cumulative Task Time: \(String(format: "%.2f", metrics.cumulativeTaskTime))s")
+        } else {
+            print("  • No completed tasks yet")
+        }
+        print("")
     }
 }
 
@@ -304,4 +335,19 @@ private extension DownloadCommand {
         return URL(fileURLWithPath: path, isDirectory: true)
     }
     #endif
+    
+    /// Prints performance metrics if available
+    func printPerformanceMetrics() async {
+        do {
+            let taskManager = try await GlobalDependencies.shared.resolve(TaskManagerProtocol.self)
+            
+            // Check if it's DefaultTaskManager to access getPerformanceMetrics
+            if let defaultTaskManager = taskManager as? DefaultTaskManager {
+                let metrics = await defaultTaskManager.getPerformanceMetrics()
+                OutputFormatter.printPerformanceMetrics(metrics)
+            }
+        } catch {
+            // Silently fail if metrics are not available
+        }
+    }
 }
