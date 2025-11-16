@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Atomics
 
 /// Thread-safe data accumulator shared by process executors
 final class ThreadSafeData: @unchecked Sendable {
@@ -28,23 +27,32 @@ final class ThreadSafeData: @unchecked Sendable {
 
 /// Thread-safe boolean flag utility shared by process executors
 final class ThreadSafeFlag: @unchecked Sendable {
-    private let value: ManagedAtomic<Bool>
+    private var value: Bool
+    private let lock = NSLock()
     
     init(initialValue: Bool = false) {
-        self.value = ManagedAtomic(initialValue)
+        self.value = initialValue
     }
     
     func set(_ newValue: Bool) {
-        value.store(newValue, ordering: .sequentiallyConsistent)
+        lock.lock()
+        defer { lock.unlock() }
+        value = newValue
     }
     
     func get() -> Bool {
-        value.load(ordering: .sequentiallyConsistent)
+        lock.lock()
+        defer { lock.unlock() }
+        return value
     }
     
     /// Atomically gets the current value and sets a new value
     func getAndSet(_ newValue: Bool) -> Bool {
-        value.exchange(newValue, ordering: .sequentiallyConsistent)
+        lock.lock()
+        defer { lock.unlock() }
+        let oldValue = value
+        value = newValue
+        return oldValue
     }
 }
 
