@@ -214,6 +214,8 @@ await M3U8Falcon.initialize(with: config)
 
 ## Testing
 
+M3U8Falcon uses Swift Testing framework for all tests. Swift Testing provides a modern, type-safe testing API that integrates seamlessly with Swift 6+.
+
 ### Running Tests
 
 ```bash
@@ -223,8 +225,8 @@ swift test
 # Run with verbose output
 swift test --verbose
 
-# Run specific test
-swift test --filter NetworkLayerTests
+# Run specific test suite
+swift test --filter ParseTests
 ```
 
 ### Writing Tests
@@ -232,23 +234,20 @@ swift test --filter NetworkLayerTests
 #### Test Structure
 
 ```swift
-import XCTest
+import Foundation
+import Testing
 @testable import M3U8Falcon
 
-final class MyExtractorTests: XCTestCase {
+@Suite("My Extractor Tests")
+final class MyExtractorTests {
     
-    var extractor: MyCustomExtractor!
+    private var extractor: MyCustomExtractor
     
-    override func setUp() {
-        super.setUp()
+    init() {
         extractor = MyCustomExtractor()
     }
     
-    override func tearDown() {
-        extractor = nil
-        super.tearDown()
-    }
-    
+    @Test("Extract M3U8 links from URL")
     func testExtraction() async throws {
         let url = URL(string: "https://example.com/video")!
         let links = try await extractor.extractM3U8Links(
@@ -256,7 +255,7 @@ final class MyExtractorTests: XCTestCase {
             options: .default
         )
         
-        XCTAssertFalse(links.isEmpty)
+        #expect(!links.isEmpty)
     }
 }
 ```

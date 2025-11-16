@@ -20,7 +20,7 @@ M3U8 is a text-based playlist format used for HTTP Live Streaming (HLS). It cont
 
 ### Key Features
 
-- **Swift 6+ Ready**: Leverages the latest Swift concurrency features with strict concurrency checking
+- **Swift 6+ Ready**: Leverages the latest Swift concurrency features and modern patterns
 - **Dependency Injection**: Full DI architecture for better testability and modularity
 - **Cross-Platform**: macOS 12.0+ support with both library and CLI interfaces
 - **Comprehensive Error Handling**: Detailed error types with context information
@@ -107,12 +107,12 @@ Core functionality is defined through protocols:
 #### Modern Swift Concurrency
 - Uses `async/await` for asynchronous operations
 - `Task` and `TaskGroup` for concurrent operations
-- Strict concurrency checking enabled
+- Platform-aware concurrency management with NSLock and DispatchGroup
 
 ## Technology Stack
 
 ### Core Technologies
-- **Swift 6.0+**: Modern Swift with strict concurrency
+- **Swift 6.0+**: Modern Swift with advanced concurrency features
 - **Foundation**: Core system frameworks
 - **Swift Argument Parser**: CLI argument parsing
 
@@ -121,7 +121,7 @@ Core functionality is defined through protocols:
 
 ### Development Tools
 - **Swift Package Manager**: Dependency management
-- **XCTest**: Testing framework
+- **Swift Testing**: Modern testing framework for comprehensive test coverage
 
 ## Project Structure
 

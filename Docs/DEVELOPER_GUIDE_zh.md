@@ -214,6 +214,8 @@ await M3U8Falcon.initialize(with: config)
 
 ## 测试
 
+M3U8Falcon 使用 Swift Testing 框架进行所有测试。Swift Testing 提供了现代化的、类型安全的测试 API，与 Swift 6+ 无缝集成。
+
 ### 运行测试
 
 ```bash
@@ -223,8 +225,8 @@ swift test
 # 运行详细输出的测试
 swift test --verbose
 
-# 运行特定测试
-swift test --filter NetworkLayerTests
+# 运行特定测试套件
+swift test --filter ParseTests
 ```
 
 ### 编写测试
@@ -232,23 +234,20 @@ swift test --filter NetworkLayerTests
 #### 测试结构
 
 ```swift
-import XCTest
+import Foundation
+import Testing
 @testable import M3U8Falcon
 
-final class MyExtractorTests: XCTestCase {
+@Suite("我的提取器测试")
+final class MyExtractorTests {
     
-    var extractor: MyCustomExtractor!
+    private var extractor: MyCustomExtractor
     
-    override func setUp() {
-        super.setUp()
+    init() {
         extractor = MyCustomExtractor()
     }
     
-    override func tearDown() {
-        extractor = nil
-        super.tearDown()
-    }
-    
+    @Test("从 URL 提取 M3U8 链接")
     func testExtraction() async throws {
         let url = URL(string: "https://example.com/video")!
         let links = try await extractor.extractM3U8Links(
@@ -256,7 +255,7 @@ final class MyExtractorTests: XCTestCase {
             options: .default
         )
         
-        XCTAssertFalse(links.isEmpty)
+        #expect(!links.isEmpty)
     }
 }
 ```

@@ -9,18 +9,13 @@ A high-performance Swift library and CLI tool for downloading, parsing, and proc
 
 ## ✨ Features
 
-- 🚀 **Swift 6+ Ready**: Built with the latest Swift 6 features including strict concurrency checking
-- 🔧 **Dependency Injection**: Full DI architecture for better testability and modularity
-- 📱 **Cross-Platform**: macOS 12.0+ and Linux support with both library and CLI interfaces
-- 🐧 **Linux Compatible**: Full Linux support with platform-specific optimizations
-- 🛡️ **Comprehensive Error Handling**: Detailed error types with context information
-- 🔄 **Concurrent Downloads**: Configurable concurrent download support (up to 20 concurrent tasks)
-- 📊 **Advanced Logging System**: Multi-level logging with categories and colored output
-- 🎯 **Multiple Sources**: Support for both web URLs and local M3U8 files
-- 🎬 **Video Processing**: FFmpeg integration for video segment combination
-- 🔐 **Encryption Support**: Built-in support for encrypted M3U8 streams with custom key/IV override
-- 🔌 **Extensible Architecture**: Protocol-based design for easy third-party integrations
-- 🧪 **Extensive Testing**: Comprehensive test suites covering all major functionality
+- 🚀 **Swift 6+**: Modern concurrency patterns and dependency injection architecture
+- 📱 **Cross-Platform**: macOS 12.0+ and Linux support (library & CLI)
+- 🔄 **High Performance**: Concurrent downloads (up to 20 tasks) with streaming support
+- 🎬 **Video Processing**: FFmpeg integration for segment combination and format conversion
+- 🔐 **Encryption**: Built-in AES-128 decryption with custom key/IV support
+- 🔌 **Extensible**: Protocol-based design for custom extractors and integrations
+- 🛡️ **Production Ready**: Comprehensive error handling, logging, and test coverage
 
 ## 🚀 Quick Start - Get Started in 5 Minutes
 
@@ -477,6 +472,8 @@ do {
 
 ## 🧪 Testing & Development
 
+M3U8Falcon uses Swift Testing framework for comprehensive test coverage.
+
 ### Run Tests
 
 ```bash
@@ -486,8 +483,8 @@ swift test
 # Run with verbose output
 swift test --verbose
 
-# Run specific test
-swift test --filter NetworkLayerTests
+# Run specific test suite
+swift test --filter ParseTests
 ```
 
 ### Development Setup
