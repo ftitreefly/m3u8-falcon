@@ -3,6 +3,12 @@
 <!-- markdownlint-disable-next-line MD033 -->
 <img src="Logo-512px.png" alt="M3U8Falcon logo" width="300">
 
+[![GitHub Release](https://img.shields.io/github/v/release/ftitreefly/m3u8-falcon?color=8A2BE2)](https://github.com/ftitreefly/m3u8-falcon/releases)
+[![min macOS](https://img.shields.io/badge/macOS-12.0+-silver)](#)
+[![Linux](https://img.shields.io/badge/Linux-supported-success)](#)
+[![Swift](https://img.shields.io/badge/Swift-6.0+-orange)](#)
+[![License](https://img.shields.io/badge/License-MIT-blue)](#)
+
 [中文文档](README_zh.md) | English
 
 A high-performance Swift library and CLI tool for downloading, parsing, and processing M3U8 video files. Built with Swift 6+ features, modern concurrency patterns, and comprehensive dependency injection architecture.
