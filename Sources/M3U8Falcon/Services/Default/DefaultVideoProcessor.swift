@@ -237,7 +237,7 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
     /// 
     /// - Throws: `FileSystemError` if file creation fails
     private func createConcatFile(segments: [URL], in directory: URL) async throws -> URL {
-        let concatURL = directory.appendingPathComponent("filelist.txt")
+        let concatURL = directory.appendingPathComponent(Constants.FileNames.fileList)
         
         // Use efficient string building
         let capacity = segments.count * 50 // Estimate capacity

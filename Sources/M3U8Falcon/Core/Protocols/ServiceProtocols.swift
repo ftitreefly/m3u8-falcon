@@ -187,7 +187,7 @@ public protocol VideoProcessorProtocol: Sendable {
     /// ## Usage Example
     /// ```swift
     /// let segmentsDir = URL(fileURLWithPath: "/path/to/segments/")
-    /// let localM3U8FileName = "file.m3u8"
+    /// let localM3U8FileName = Constants.FileNames.localM3U8
     /// let outputVideo = URL(fileURLWithPath: "/path/to/output/video.mp4")
     /// 
     /// try await processor.decryptAndCombineSegments(in: segmentsDir, with: localM3U8FileName, outputFile: outputVideo) 

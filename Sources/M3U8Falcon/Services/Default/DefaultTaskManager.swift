@@ -413,7 +413,7 @@ public actor DefaultTaskManager: TaskManagerProtocol {
             let baseUrl = taskInfo.baseUrl ?? taskInfo.url.deletingLastPathComponent()
             
             // save content to local file in temp directory
-            let localM3U8FileName = "file.m3u8"
+            let localM3U8FileName = Constants.FileNames.localM3U8
             let localM3U8File = tempDir.appendingPathComponent(localM3U8FileName)
             try content.write(to: localM3U8File, atomically: true, encoding: .utf8)
             logger.debug("M3U8 content saved to \(localM3U8File.path)", category: .fileSystem)
@@ -433,7 +433,7 @@ public actor DefaultTaskManager: TaskManagerProtocol {
     private func processUpdateCustomKeyAndIV(_ playlist: MediaPlaylist, taskInfo: inout TaskInfo) async throws {
         if taskInfo.key != nil || taskInfo.iv != nil {
             logger.debug("Custom key/iv are provided, will update local m3u8 file...", category: .processing)
-                let m3u8Content = try String(contentsOf: tempDir.appendingPathComponent("file.m3u8"), encoding: .utf8)
+                let m3u8Content = try String(contentsOf: tempDir.appendingPathComponent(Constants.FileNames.localM3U8), encoding: .utf8)
 
             if let keySegment = playlist.tags.keySegments.first {
                 var newKeyLine = "#EXT-X-KEY:"
@@ -442,7 +442,7 @@ public actor DefaultTaskManager: TaskManagerProtocol {
                 }
 
                 if let _ = taskInfo.key {
-                    newKeyLine += ",URI=\"decryption.key\""
+                    newKeyLine += ",URI=\"\(Constants.FileNames.decryptionKey)\""
                 } else {
                     newKeyLine += ",URI=\"\(keySegment.uri)\""
                 }
@@ -453,7 +453,7 @@ public actor DefaultTaskManager: TaskManagerProtocol {
                     newKeyLine += ",IV=0x\(keySegment.iv)"
                 }
 
-                let m3u8Path = tempDir.appendingPathComponent("file.m3u8")
+                let m3u8Path = tempDir.appendingPathComponent(Constants.FileNames.localM3U8)
                 var newContent = m3u8Content
                 let keyRegex = try NSRegularExpression(pattern: #"^#EXT-X-KEY:.*$"#, options: [.anchorsMatchLines])
                 if keyRegex
@@ -470,8 +470,11 @@ public actor DefaultTaskManager: TaskManagerProtocol {
 
             // create key file
             if let key = taskInfo.key {
-                let keyFileURL = tempDir.appendingPathComponent("decryption.key")
-                try Data(hexString: key)!.write(to: keyFileURL, options: .atomic) 
+                let keyFileURL = tempDir.appendingPathComponent(Constants.FileNames.decryptionKey)
+                guard let keyData = Data(hexString: key) else {
+                    throw ProcessingError.invalidHexString(key)
+                }
+                try keyData.write(to: keyFileURL, options: .atomic)
                 logger.debug("Custom key file created at \(keyFileURL.path)", category: .fileSystem)
             }
         }
@@ -513,7 +516,7 @@ public actor DefaultTaskManager: TaskManagerProtocol {
             logger.debug("Decrypting video segments, and combining...", category: .processing)
             try await processor.decryptAndCombineSegments(
                 in: tempDir,
-                with: "file.m3u8",
+                with: Constants.FileNames.localM3U8,
                 outputFile: outputPath
             )
         } else {
