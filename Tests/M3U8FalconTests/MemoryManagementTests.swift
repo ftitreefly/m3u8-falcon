@@ -103,7 +103,7 @@ final class MemoryManagementTests {
     @Test("Streaming downloader initialization")
     func streamingDownloaderInitialization() async {
         let config = DIConfiguration.performanceOptimized()
-        let client = EnhancedNetworkClient(
+        let client = DefaultNetworkClient(
             configuration: config,
             retryStrategy: NoRetryStrategy()
         )
@@ -123,7 +123,7 @@ final class MemoryManagementTests {
     @Test("Streaming download to file")
     func streamingDownloadToFile() async throws {
         let config = DIConfiguration.performanceOptimized()
-        let client = EnhancedNetworkClient(
+        let client = DefaultNetworkClient(
             configuration: config,
             retryStrategy: NoRetryStrategy()
         )
@@ -157,7 +157,7 @@ final class MemoryManagementTests {
     @Test("Streaming download to memory")
     func streamingDownloadToMemory() async throws {
         let config = DIConfiguration.performanceOptimized()
-        let client = EnhancedNetworkClient(
+        let client = DefaultNetworkClient(
             configuration: config,
             retryStrategy: NoRetryStrategy()
         )
@@ -179,7 +179,7 @@ final class MemoryManagementTests {
     @Test("Memory efficient download")
     func memoryEfficientDownload() async throws {
         let config = DIConfiguration.performanceOptimized()
-        let client = EnhancedNetworkClient(
+        let client = DefaultNetworkClient(
             configuration: config,
             retryStrategy: NoRetryStrategy()
         )

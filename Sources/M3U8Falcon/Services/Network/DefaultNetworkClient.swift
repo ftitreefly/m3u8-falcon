@@ -1,5 +1,5 @@
 //
-//  EnhancedNetworkClient.swift
+//  DefaultNetworkClient.swift
 //  M3U8Falcon
 //
 //  Created by tree_fly on 2025/9/30.
@@ -10,7 +10,7 @@ import Foundation
 import FoundationNetworking
 #endif
 
-// MARK: - Enhanced Network Client
+// MARK: - Default Network Client
 
 /// High-performance network client with retry logic and connection pooling
 /// 
@@ -28,7 +28,7 @@ import FoundationNetworking
 /// 
 /// ## Usage Example
 /// ```swift
-/// let client = EnhancedNetworkClient(
+/// let client = DefaultNetworkClient(
 ///     configuration: .performanceOptimized(),
 ///     retryStrategy: ExponentialBackoffRetryStrategy()
 /// )
@@ -36,7 +36,7 @@ import FoundationNetworking
 /// let request = URLRequest(url: url)
 /// let (data, response) = try await client.data(for: request)
 /// ```
-public actor EnhancedNetworkClient: NetworkClientProtocol {
+public actor DefaultNetworkClient: NetworkClientProtocol {
     /// The underlying URLSession for network operations
     private let session: URLSession
     
@@ -49,7 +49,7 @@ public actor EnhancedNetworkClient: NetworkClientProtocol {
     /// Request counter for tracking
     private var requestCount: Int = 0
     
-    /// Initializes a new enhanced network client
+    /// Initializes a new default network client
     /// 
     /// - Parameters:
     ///   - configuration: Configuration settings for the client
@@ -110,6 +110,14 @@ public actor EnhancedNetworkClient: NetworkClientProtocol {
     ///   - The last error encountered if all retries fail
     public nonisolated func data(for request: URLRequest) async throws -> (Data, URLResponse) {
         return try await performRequestWithRetry(request: request)
+    }
+    
+    /// Downloads content to a temporary file with automatic retry logic
+    ///
+    /// - Parameter request: The URL request to execute
+    /// - Returns: A tuple containing the temporary file URL and URL response
+    public nonisolated func download(for request: URLRequest) async throws -> (URL, URLResponse) {
+        return try await performDownloadWithRetry(request: request)
     }
     
     /// Performs the actual request with retry logic
@@ -175,6 +183,46 @@ public actor EnhancedNetworkClient: NetworkClientProtocol {
         throw lastError ?? NetworkError.unknownError()
     }
     
+    /// Performs the actual download with retry logic
+    private func performDownloadWithRetry(request: URLRequest) async throws -> (URL, URLResponse) {
+        var lastError: Error?
+        let maxAttempts = retryStrategy.maxAttempts + 1
+        
+        for attempt in 0..<maxAttempts {
+            do {
+                incrementRequestCount()
+                let (location, response) = try await session.download(for: request)
+                
+                // Validate response (clean up temp file if invalid)
+                do {
+                    try validateResponse(response, data: Data(), url: request.url!)
+                } catch {
+                    try? FileManager.default.removeItem(at: location)
+                    throw error
+                }
+                
+                if attempt > 0 {
+                    Logger.info("Download succeeded after \(attempt) retries", category: .network)
+                }
+                
+                return (location, response)
+            } catch {
+                lastError = error
+                Logger.debug("Download failed (attempt \(attempt + 1)/\(maxAttempts)): \(error.localizedDescription)", category: .network)
+                
+                guard attempt < maxAttempts - 1, retryStrategy.shouldRetry(error: error, attempt: attempt) else {
+                    break
+                }
+                
+                let delay = retryStrategy.delayBeforeRetry(attempt: attempt)
+                Logger.debug("Retrying download in \(String(format: "%.2f", delay)) seconds...", category: .network)
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+        }
+        
+        throw lastError ?? NetworkError.unknownError()
+    }
+    
     /// Validates the HTTP response
     /// 
     /// - Parameters:
@@ -226,3 +274,4 @@ public actor EnhancedNetworkClient: NetworkClientProtocol {
         requestCount = 0
     }
 }
+

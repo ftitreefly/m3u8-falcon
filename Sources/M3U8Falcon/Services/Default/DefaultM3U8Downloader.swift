@@ -123,17 +123,21 @@ public struct DefaultM3U8Downloader: M3U8DownloaderProtocol {
             request.setValue(value, forHTTPHeaderField: key)
         }
         
-        let (data, response) = try await networkClient.data(for: request)
+        let (location, response) = try await networkClient.download(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
+            try? FileManager.default.removeItem(at: location)
             throw NetworkError.serverError(url, statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
         }
         
         let filename = url.lastPathComponent
         let fileURL = directory.appendingPathComponent(filename)
         
-        try data.write(to: fileURL, options: .atomic)
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            try FileManager.default.removeItem(at: fileURL)
+        }
+        try FileManager.default.moveItem(at: location, to: fileURL)
     }
 }
 

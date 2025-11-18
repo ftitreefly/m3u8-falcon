@@ -56,6 +56,23 @@ final class MockNetworkClient: NetworkClientProtocol, @unchecked Sendable {
         }
     }
     
+    func download(for request: URLRequest) async throws -> (URL, URLResponse) {
+        guard let url = request.url else {
+            throw URLError(.badURL)
+        }
+        let result = fetchResult(for: url)
+        switch result {
+        case .success(let payload):
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try payload.data.write(to: tempURL)
+            return (tempURL, payload.response)
+        case .failure(let error):
+            throw error
+        case .none:
+            throw URLError(.unsupportedURL)
+        }
+    }
+    
     private func store(result: Result<Payload, Error>, for url: URL) {
         lock.lock()
         responses[url] = result

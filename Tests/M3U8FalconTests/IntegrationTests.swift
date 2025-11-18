@@ -19,6 +19,7 @@ final class IntegrationTests {
     private var downloader: M3U8DownloaderProtocol
     private var parserService: M3U8ParserServiceProtocol
     private var taskManager: TaskManagerProtocol
+    private let mockProcessor = MockVideoProcessor()
     
     init() throws {
         testEnv = try TestEnvironment.create()
@@ -26,7 +27,7 @@ final class IntegrationTests {
         
         downloader = try testEnv.container.resolve(M3U8DownloaderProtocol.self)
         parserService = try testEnv.container.resolve(M3U8ParserServiceProtocol.self)
-        taskManager = try testEnv.createTaskManager(maxConcurrentTasks: 3)
+        taskManager = try testEnv.createTaskManager(processor: mockProcessor, maxConcurrentTasks: 3)
     }
     
     deinit {

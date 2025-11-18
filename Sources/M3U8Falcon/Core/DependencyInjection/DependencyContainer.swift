@@ -310,7 +310,7 @@ private extension DependencyContainer {
     
     func registerNetworkLayer(with configuration: DIConfiguration) {
         registerSingleton(NetworkClientProtocol.self) {
-            EnhancedNetworkClient(
+            DefaultNetworkClient(
                 configuration: configuration,
                 retryStrategy: ExponentialBackoffRetryStrategy(
                     baseDelay: configuration.retryBackoffBase,

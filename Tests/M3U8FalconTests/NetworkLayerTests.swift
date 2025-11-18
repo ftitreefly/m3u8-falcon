@@ -141,12 +141,12 @@ final class NetworkLayerTests {
         #expect(serverError.recoverySuggestion!.contains("retried"))
     }
     
-    // MARK: - Enhanced Network Client Tests
+    // MARK: - Default Network Client Tests
     
-    @Test("Enhanced network client initialization")
-    func enhancedNetworkClientInitialization() async {
+    @Test("Default network client initialization")
+    func defaultNetworkClientInitialization() async {
         let config = DIConfiguration.performanceOptimized()
-        let client = EnhancedNetworkClient(
+        let client = DefaultNetworkClient(
             configuration: config,
             retryStrategy: ExponentialBackoffRetryStrategy()
         )

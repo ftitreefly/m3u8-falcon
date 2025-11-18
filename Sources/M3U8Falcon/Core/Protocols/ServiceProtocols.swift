@@ -666,6 +666,10 @@ public protocol JavaScriptExecutorProtocol: Sendable {
 public protocol NetworkClientProtocol: Sendable {
     /// Perform a request and return data and response
     func data(for request: URLRequest) async throws -> (Data, URLResponse)
+    
+    /// Download content to a temporary file
+    /// - Returns: (Temporary file URL, URLResponse)
+    func download(for request: URLRequest) async throws -> (URL, URLResponse)
 }
 
 /// Protocol for logging

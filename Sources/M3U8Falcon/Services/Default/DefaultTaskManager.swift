@@ -680,13 +680,20 @@ public actor DefaultTaskManager: TaskManagerProtocol {
             request.setValue(value, forHTTPHeaderField: key)
         }
         
-        let (data, response) = try await networkClient.data(for: request)
+        let (location, response) = try await networkClient.download(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            try? FileManager.default.removeItem(at: location)
             throw NetworkError.serverError(url, statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
         }
         
-        try data.write(to: directory.appendingPathComponent(url.lastPathComponent), options: .atomic)
-        return Int64(data.count)
+        let destinationURL = directory.appendingPathComponent(url.lastPathComponent)
+        if FileManager.default.fileExists(atPath: destinationURL.path) {
+            try FileManager.default.removeItem(at: destinationURL)
+        }
+        try FileManager.default.moveItem(at: location, to: destinationURL)
+        
+        let attributes = try FileManager.default.attributesOfItem(atPath: destinationURL.path)
+        return attributes[.size] as? Int64 ?? 0
     }
 }
  
