@@ -86,12 +86,18 @@ public struct NetworkError: M3U8FalconError {
     }
     
     /// HTTP server error (5xx) for URL with status code
+    /// 
+    /// Note: If statusCode is not in the 5xx range, this will return an error
+    /// with code 1006 (invalid response) instead of 1004 (server error).
     public static func serverError(_ url: URL, statusCode: Int) -> NetworkError {
         let code = (statusCode >= 500 && statusCode < 600) ? 1004 : 1006
+        let message = (statusCode >= 500 && statusCode < 600)
+            ? "Server error \(statusCode) for \(url.absoluteString)"
+            : "Invalid response \(statusCode) for \(url.absoluteString)"
         return NetworkError(
             code: code,
             underlyingError: nil,
-            message: "Server error \(statusCode) for \(url.absoluteString)",
+            message: message,
             url: url
         )
     }

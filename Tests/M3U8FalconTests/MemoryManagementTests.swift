@@ -20,48 +20,52 @@ final class MemoryManagementTests {
     
     @Test("Resource manager creates temporary directory")
     func resourceManagerCreatesTemporaryDirectory() async throws {
-        let manager = ResourceManager()
+        let fileSystem = DefaultFileSystemService()
+        let manager = ResourceManager(fileSystem: fileSystem)
         
         let tempDir = try await manager.createTemporaryDirectory(prefix: "test")
-        #expect(FileManager.default.fileExists(atPath: tempDir.path))
+        #expect(fileSystem.fileExists(at: tempDir))
         
         try await manager.cleanup(tempDir)
-        #expect(!FileManager.default.fileExists(atPath: tempDir.path))
+        #expect(!fileSystem.fileExists(at: tempDir))
     }
     
     @Test("Resource manager auto cleanup")
     func resourceManagerAutoCleanup() async throws {
+        let fileSystem = DefaultFileSystemService()
         let tempDir: URL
         
         do {
-            let manager = ResourceManager(autoCleanupOnDeinit: true)
+            let manager = ResourceManager(fileSystem: fileSystem, autoCleanupOnDeinit: true)
             tempDir = try await manager.createTemporaryDirectory(prefix: "test")
-            #expect(FileManager.default.fileExists(atPath: tempDir.path))
+            #expect(fileSystem.fileExists(at: tempDir))
         }
         
         try await Task.sleep(nanoseconds: 100_000_000)
-        #expect(!FileManager.default.fileExists(atPath: tempDir.path))
+        #expect(!fileSystem.fileExists(at: tempDir))
     }
     
     @Test("Resource manager manual cleanup all")
     func resourceManagerManualCleanupAll() async throws {
-        let manager = ResourceManager()
+        let fileSystem = DefaultFileSystemService()
+        let manager = ResourceManager(fileSystem: fileSystem)
         
         let tempDir1 = try await manager.createTemporaryDirectory(prefix: "test1")
         let tempDir2 = try await manager.createTemporaryDirectory(prefix: "test2")
         
-        #expect(FileManager.default.fileExists(atPath: tempDir1.path))
-        #expect(FileManager.default.fileExists(atPath: tempDir2.path))
+        #expect(fileSystem.fileExists(at: tempDir1))
+        #expect(fileSystem.fileExists(at: tempDir2))
         
         try await manager.cleanupAll()
         
-        #expect(!FileManager.default.fileExists(atPath: tempDir1.path))
-        #expect(!FileManager.default.fileExists(atPath: tempDir2.path))
+        #expect(!fileSystem.fileExists(at: tempDir1))
+        #expect(!fileSystem.fileExists(at: tempDir2))
     }
     
     @Test("Resource manager statistics")
     func resourceManagerStatistics() async throws {
-        let manager = ResourceManager()
+        let fileSystem = DefaultFileSystemService()
+        let manager = ResourceManager(fileSystem: fileSystem)
         
         let dir1 = try await manager.createTemporaryDirectory(prefix: "test1")
         let dir2 = try await manager.createTemporaryDirectory(prefix: "test2")
@@ -83,9 +87,10 @@ final class MemoryManagementTests {
     
     @Test("Resource manager registration")
     func resourceManagerRegistration() async throws {
-        let manager = ResourceManager()
+        let fileSystem = DefaultFileSystemService()
+        let manager = ResourceManager(fileSystem: fileSystem)
         
-        let tempFile = FileManager.default.temporaryDirectory
+        let tempFile = fileSystem.temporaryDirectory()
             .appendingPathComponent("test-\(UUID().uuidString).txt")
         try "test content".write(to: tempFile, atomically: true, encoding: .utf8)
         
@@ -95,23 +100,26 @@ final class MemoryManagementTests {
         #expect(stats.files == 1)
         
         try await manager.cleanup(tempFile)
-        #expect(!FileManager.default.fileExists(atPath: tempFile.path))
+        #expect(!fileSystem.fileExists(at: tempFile))
     }
     
     // MARK: - Streaming Downloader Tests
     
     @Test("Streaming downloader initialization")
     func streamingDownloaderInitialization() async {
+        let fileSystem = DefaultFileSystemService()
         let config = DIConfiguration.performanceOptimized()
         let client = DefaultNetworkClient(
             configuration: config,
-            retryStrategy: NoRetryStrategy()
+            retryStrategy: NoRetryStrategy(),
+            fileSystem: fileSystem
         )
         
         let streamingClient = MockStreamingClient()
         let downloader = StreamingDownloader(
             networkClient: client,
             streamingClient: streamingClient,
+            fileSystem: fileSystem,
             bufferSize: 64 * 1024
         )
         
@@ -122,21 +130,24 @@ final class MemoryManagementTests {
     
     @Test("Streaming download to file")
     func streamingDownloadToFile() async throws {
+        let fileSystem = DefaultFileSystemService()
         let config = DIConfiguration.performanceOptimized()
         let client = DefaultNetworkClient(
             configuration: config,
-            retryStrategy: NoRetryStrategy()
+            retryStrategy: NoRetryStrategy(),
+            fileSystem: fileSystem
         )
         
         let streamingClient = MockStreamingClient()
         let downloader = StreamingDownloader(
             networkClient: client,
             streamingClient: streamingClient,
+            fileSystem: fileSystem,
             bufferSize: 8 * 1024
         )
         
         let url = URL(string: "test://mock/bytes/1024")!
-        let destination = FileManager.default.temporaryDirectory
+        let destination = fileSystem.temporaryDirectory()
             .appendingPathComponent("test-download-\(UUID().uuidString).bin")
         
         try await downloader.downloadToFile(
@@ -145,27 +156,30 @@ final class MemoryManagementTests {
             progressHandler: { _, _ in }
         )
         
-        #expect(FileManager.default.fileExists(atPath: destination.path))
+        #expect(fileSystem.fileExists(at: destination))
         
         let attributes = try FileManager.default.attributesOfItem(atPath: destination.path)
         let fileSize = attributes[.size] as? Int64
         #expect(fileSize == 1024)
         
-        try FileManager.default.removeItem(at: destination)
+        try fileSystem.removeItem(at: destination)
     }
     
     @Test("Streaming download to memory")
     func streamingDownloadToMemory() async throws {
+        let fileSystem = DefaultFileSystemService()
         let config = DIConfiguration.performanceOptimized()
         let client = DefaultNetworkClient(
             configuration: config,
-            retryStrategy: NoRetryStrategy()
+            retryStrategy: NoRetryStrategy(),
+            fileSystem: fileSystem
         )
         
         let streamingClient = MockStreamingClient()
         let downloader = StreamingDownloader(
             networkClient: client,
-            streamingClient: streamingClient
+            streamingClient: streamingClient,
+            fileSystem: fileSystem
         )
         
         let url = URL(string: "test://mock/bytes/512")!
@@ -178,21 +192,24 @@ final class MemoryManagementTests {
     
     @Test("Memory efficient download")
     func memoryEfficientDownload() async throws {
+        let fileSystem = DefaultFileSystemService()
         let config = DIConfiguration.performanceOptimized()
         let client = DefaultNetworkClient(
             configuration: config,
-            retryStrategy: NoRetryStrategy()
+            retryStrategy: NoRetryStrategy(),
+            fileSystem: fileSystem
         )
         
         let streamingClient = MockStreamingClient()
         let downloader = StreamingDownloader(
             networkClient: client,
             streamingClient: streamingClient,
+            fileSystem: fileSystem,
             bufferSize: 16 * 1024
         )
         
         let url = URL(string: "test://mock/bytes/102400")!
-        let destination = FileManager.default.temporaryDirectory
+        let destination = fileSystem.temporaryDirectory()
             .appendingPathComponent("memory-test-\(UUID().uuidString).bin")
         
         try await downloader.downloadToFile(
@@ -200,8 +217,8 @@ final class MemoryManagementTests {
             destination: destination
         )
         
-        #expect(FileManager.default.fileExists(atPath: destination.path))
+        #expect(fileSystem.fileExists(at: destination))
         
-        try FileManager.default.removeItem(at: destination)
+        try fileSystem.removeItem(at: destination)
     }
 }

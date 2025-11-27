@@ -57,16 +57,15 @@ dependencies: [
 ```swift
 import M3U8Falcon
 
-// 初始化库
+// ⚠️ 重要：首先初始化库（必需）
 await M3U8Falcon.initialize()
 
 // 从M3U8 URL下载视频
+// savedDirectory 是可选的 - 默认为 Downloads 文件夹
 try await M3U8Falcon.download(
     .web,
     url: URL(string: "https://example.com/video.m3u8")!,
-    savedDirectory: URL(fileURLWithPath: "~/Downloads/"),
-    name: "my-video",
-    verbose: true
+    name: "my-video"
 )
 
 print("✅ 视频下载成功！")
@@ -86,182 +85,6 @@ m3u8-falcon extract "https://example.com/video-page"
 ```
 
 就是这样！更多高级功能请参见下面的章节。
-
----
-
-## 🔌 M3U8LinkExtractorProtocol - 第三方集成核心接口
-
-`M3U8LinkExtractorProtocol` 是M3U8Falcon的核心扩展接口，允许第三方开发者轻松集成各种视频网站的M3U8链接提取功能。
-
-### 协议概述
-
-```swift
-public protocol M3U8LinkExtractorProtocol: Sendable {
-    /// 从网页中提取M3U8链接
-    func extractM3U8Links(from url: URL, options: LinkExtractionOptions) async throws -> [M3U8Link]
-    
-    /// 返回该提取器支持的域名列表
-    func getSupportedDomains() -> [String]
-    
-    /// 返回提取器的完整信息
-    func getExtractorInfo() -> ExtractorInfo
-    
-    /// 检查该提取器是否能处理指定URL
-    func canHandle(url: URL) -> Bool
-}
-```
-
-### 完整可运行示例
-
-以下是一个完整的、可运行的示例，展示如何实现自定义M3U8提取器：
-
-```swift
-import Foundation
-import M3U8Falcon
-
-// 1️⃣ 创建自定义提取器
-final class CustomVideoSiteExtractor: M3U8LinkExtractorProtocol {
-    
-    private let supportedDomains = ["example.com", "video.example.com"]
-    
-    public init() {}
-    
-    // 提取M3U8链接的核心方法
-    public func extractM3U8Links(from url: URL, options: LinkExtractionOptions) async throws -> [M3U8Link] {
-        // 下载网页内容
-        let (data, _) = try await URLSession.shared.data(from: url)
-        guard let html = String(data: data, encoding: .utf8) else {
-            return []
-        }
-        
-        // 自定义提取函数
-        var links: [M3U8Link] = []
-        for index in 0 ... 5 {
-            let m3u8URL = "video-\(index).m3u8"
-            let videoName = "name-\(index)"
-            
-            links.append(M3U8Link(
-                url: m3u8URL,
-                name: videoName
-            ))
-        }
-        
-        return links
-    }
-    
-    // 返回支持的域名
-    public func getSupportedDomains() -> [String] {
-        return supportedDomains
-    }
-    
-    // 返回提取器信息
-    public func getExtractorInfo() -> ExtractorInfo {
-        return ExtractorInfo(
-            name: "Custom Video Site Extractor",
-            version: "1.0.0",
-            supportedDomains: getSupportedDomains(),
-            capabilities: [.directLinks, .javascriptVariables]
-        )
-    }
-    
-    // 检查是否能处理该URL
-    public func canHandle(url: URL) -> Bool {
-        guard let host = url.host else { return false }
-        return supportedDomains.contains { host.hasSuffix($0) }
-    }
-}
-
-// 2️⃣ 注册并使用提取器
-async func main() async throws {
-    // 创建提取器注册表
-    let registry = DefaultM3U8ExtractorRegistry()
-    
-    // 注册你的自定义提取器
-    let customExtractor = CustomVideoSiteExtractor()
-    registry.registerExtractor(customExtractor)
-    
-    // 使用提取器提取M3U8链接
-    let url = URL(string: "https://example.com/video-page")!
-    let links = try await registry.extractM3U8Links(
-        from: url,
-        options: LinkExtractionOptions.default
-    )
-    
-    // 处理提取到的链接
-    print("找到 \(links.count) 个M3U8链接：")
-    for link in links {
-        print("  📹 \(link.name)")
-        print("     URL: \(link.url)")
-    }
-    
-    // 3️⃣ 下载提取到的第一个视频
-    if let firstLink = links.first {
-        await M3U8Falcon.initialize()
-        try await M3U8Falcon.download(
-            .web,
-            url: firstLink.url,
-            savedDirectory: URL(fileURLWithPath: "~/Downloads/"),
-            name: firstLink.name,
-            verbose: true
-        )
-        print("✅ 视频下载成功！")
-    }
-}
-
-// 运行示例
-try await main()
-```
-
-### 核心组件
-
-#### M3U8Link 结构
-
-```swift
-public struct M3U8Link: Sendable {
-    let url: URL              // M3U8播放列表URL（必需）
-    let name: String          // 视频名称（必需）
-    // 其他可选字段：bandwidth（带宽）、resolution（分辨率）、source（来源）等
-}
-```
-
-#### LinkExtractionOptions
-
-```swift
-public struct LinkExtractionOptions: Sendable {
-    let timeout: TimeInterval        // 请求超时时间
-    let maxRetries: Int              // 最大重试次数
-    let methods: [ExtractionMethod]  // 提取方法
-    let headers: [String: String]    // HTTP headers
-    
-    public static let `default`: LinkExtractionOptions
-}
-```
-
-#### ExtractorInfo
-
-```swift
-public struct ExtractorInfo: Sendable {
-    let name: String                    // 提取器名称
-    let version: String                 // 版本号
-    let supportedDomains: [String]      // 支持的域名列表
-    let capabilities: [Capability]      // 功能列表
-}
-```
-
-### CLI集成
-
-你的自定义提取器也可以通过CLI使用：
-
-```bash
-# 提取M3U8链接
-m3u8-falcon extract "https://example.com/video-page"
-
-# 查看已注册的提取器
-m3u8-falcon extract "https://example.com/video-page" --show-extractors
-
-# 指定提取方法
-m3u8-falcon extract "https://example.com/video-page" --methods direct-links
-```
 
 ---
 
@@ -326,23 +149,38 @@ import M3U8Falcon
 // 初始化工具
 await M3U8Falcon.initialize()
 
-// 下载M3U8文件并显示详细输出
+// 下载M3U8文件（savedDirectory 是可选的，默认为 Downloads 文件夹）
+try await M3U8Falcon.download(
+    .web,
+    url: URL(string: "https://example.com/video.m3u8")!,
+    name: "my-video"
+)
+
+// 使用自定义目录下载
 try await M3U8Falcon.download(
     .web,
     url: URL(string: "https://example.com/video.m3u8")!,
     savedDirectory: URL(fileURLWithPath: "/Users/username/Downloads/videos/"),
-    name: "my-video",
-    verbose: true
+    name: "my-video"
 )
 
-// 使用自定义解密密钥和IV下载加密的M3U8
+// 使用自定义AES-128解密下载加密的M3U8
 try await M3U8Falcon.download(
     .web,
     url: URL(string: "https://example.com/encrypted-video.m3u8")!,
-    savedDirectory: URL(fileURLWithPath: "/Users/username/Downloads/videos/"),
     name: "encrypted-video",
-    customKey: "0123456789abcdef0123456789abcdef",
-    customIV: "0123456789abcdef0123456789abcdef"
+    strategy: .customAES128(
+        key: "0123456789abcdef0123456789abcdef",
+        iv: "0123456789abcdef0123456789abcdef"
+    )
+)
+
+// 仅使用密钥下载加密的M3U8（IV从片段序列号派生）
+try await M3U8Falcon.download(
+    .web,
+    url: URL(string: "https://example.com/encrypted-video.m3u8")!,
+    name: "encrypted-video",
+    strategy: .customAES128(key: "0123456789abcdef0123456789abcdef")
 )
 ```
 
@@ -364,6 +202,35 @@ case .cancelled:
 }
 ```
 
+### 从网页提取M3U8链接
+
+```swift
+import M3U8Falcon
+
+// 首先初始化库
+await M3U8Falcon.initialize()
+
+// 创建提取器注册表（使用DI容器中的配置）
+let registry = await DefaultM3U8ExtractorRegistry.create()
+
+// 或使用默认配置创建（一行代码）
+// let registry = DefaultM3U8ExtractorRegistry()
+
+// 注册自定义提取器（可选）
+// registry.registerExtractor(YouTubeExtractor())
+// registry.registerExtractor(VimeoExtractor())
+
+// 从网页提取M3U8链接
+let links = try await registry.extractM3U8Links(
+    from: URL(string: "https://example.com/video-page")!,
+    options: LinkExtractionOptions.default
+)
+
+for link in links {
+    print("找到M3U8链接: \(link.url) (置信度: \(link.confidence))")
+}
+```
+
 ### CLI命令
 
 ```bash
@@ -372,6 +239,9 @@ m3u8-falcon download https://example.com/video.m3u8
 
 # 使用自定义文件名下载
 m3u8-falcon download https://example.com/video.m3u8 --name my-video
+
+# 下载到自定义目录
+m3u8-falcon download https://example.com/video.m3u8 --output /path/to/videos
 
 # 使用自定义解密密钥下载加密的M3U8
 m3u8-falcon download https://example.com/video.m3u8 --key 0123456789abcdef0123456789abcdef
@@ -396,12 +266,12 @@ m3u8-falcon info
 ### 自定义配置
 
 ```swift
+// 配置详细日志
 let customConfig = DIConfiguration(
     ffmpegPath: "/custom/path/ffmpeg",
     maxConcurrentDownloads: 10,
     downloadTimeout: 60,
-    key: "0123456789abcdef0123456789abcdef",  // 可选：默认解密密钥
-    iv: "0123456789abcdef0123456789abcdef"     // 可选：默认IV
+    logLevel: .verbose  // 启用详细日志
 )
 
 await M3U8Falcon.initialize(with: customConfig)
@@ -428,23 +298,33 @@ Logger.configure(customConfig)
 
 ### 加密M3U8支持
 
-对于加密的M3U8流，你可以提供自定义的AES-128解密密钥：
+对于加密的M3U8流，你可以使用 `DecryptionStrategy` 枚举提供自定义的AES-128解密：
 
 ```swift
-// 方法1：通过配置（应用于所有下载）
-let config = DIConfiguration(
-    key: "0123456789abcdef0123456789abcdef",
-    iv: "0123456789abcdef0123456789abcdef"
+// 无解密（默认）
+try await M3U8Falcon.download(
+    .web,
+    url: videoURL,
+    name: "video"
 )
-await M3U8Falcon.initialize(with: config)
 
-// 方法2：单次下载覆盖（优先于配置）
+// 使用密钥和IV的自定义AES-128解密
 try await M3U8Falcon.download(
     .web,
     url: encryptedVideoURL,
-    savedDirectory: outputDir,
-    key: "0123456789abcdef0123456789abcdef",
-    iv: "0123456789abcdef0123456789abcdef"
+    name: "encrypted-video",
+    strategy: .customAES128(
+        key: "0123456789abcdef0123456789abcdef",
+        iv: "0123456789abcdef0123456789abcdef"
+    )
+)
+
+// 仅使用密钥的自定义AES-128解密（IV从片段序列号派生）
+try await M3U8Falcon.download(
+    .web,
+    url: encryptedVideoURL,
+    name: "encrypted-video",
+    strategy: .customAES128(key: "0123456789abcdef0123456789abcdef")
 )
 ```
 
@@ -452,16 +332,20 @@ try await M3U8Falcon.download(
 
 - 示例：`"0123456789abcdef0123456789abcdef"`
 - 空格和`0x`前缀会自动移除
+- IV 是可选的 - 如果未提供，将从片段序列号派生
 
 ### 错误处理
 
 ```swift
 do {
-    try await M3U8Falcon.download(.web, url: videoURL, verbose: true)
+    try await M3U8Falcon.download(.web, url: videoURL, name: "my-video")
 } catch let error as FileSystemError {
     print("文件系统错误：\(error.message)")
 } catch let error as NetworkError {
     print("网络错误：\(error.message)")
+} catch let error as ConfigurationError {
+    print("配置错误：\(error.message)")
+    // 确保首先调用 M3U8Falcon.initialize()
 } catch {
     print("意外错误：\(error)")
 }

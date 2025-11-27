@@ -157,7 +157,8 @@ final class DownloadTests {
         let customDownloader = DefaultM3U8Downloader(
             commandExecutor: NoopCommandExecutor(),
             configuration: customConfig,
-            networkClient: mockNetworkClient
+            networkClient: mockNetworkClient,
+            fileSystem: testEnv.fileSystem
         )
         
         let content = try await customDownloader.downloadContent(from: M3U8TestFixtures.masterPlaylistURL)
@@ -313,7 +314,8 @@ final class DownloadTests {
         let limitedDownloader = DefaultM3U8Downloader(
             commandExecutor: NoopCommandExecutor(),
             configuration: limitedConfig,
-            networkClient: mockNetworkClient
+            networkClient: mockNetworkClient,
+            fileSystem: testEnv.fileSystem
         )
         
         // Create more segment URLs than the concurrency limit
@@ -359,7 +361,8 @@ final class DownloadTests {
         let limitedDownloader = DefaultM3U8Downloader(
             commandExecutor: NoopCommandExecutor(),
             configuration: limitedConfig,
-            networkClient: mockNetworkClient
+            networkClient: mockNetworkClient,
+            fileSystem: testEnv.fileSystem
         )
         
         // Create more segment URLs than the concurrency limit

@@ -145,10 +145,12 @@ final class NetworkLayerTests {
     
     @Test("Default network client initialization")
     func defaultNetworkClientInitialization() async {
+        let fileSystem = DefaultFileSystemService()
         let config = DIConfiguration.performanceOptimized()
         let client = DefaultNetworkClient(
             configuration: config,
-            retryStrategy: ExponentialBackoffRetryStrategy()
+            retryStrategy: ExponentialBackoffRetryStrategy(),
+            fileSystem: fileSystem
         )
         
         let requestCount = await client.getRequestCount()

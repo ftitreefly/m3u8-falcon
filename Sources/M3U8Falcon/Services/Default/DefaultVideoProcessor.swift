@@ -30,7 +30,8 @@ import Foundation
 /// ```swift
 /// let processor = DefaultVideoProcessor(
 ///     commandExecutor: commandExecutor,
-///     configuration: configuration
+///     configuration: configuration,
+///     fileSystem: fileSystem
 /// )
 /// 
 /// // Combine segments into a single video file
@@ -53,14 +54,19 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
     /// Configuration settings for video processing
     private let configuration: DIConfiguration
     
+    /// File system service for file operations
+    private let fileSystem: FileSystemServiceProtocol
+    
     /// Initializes a new default video processor
     /// 
     /// - Parameters:
     ///   - commandExecutor: The command executor for running external commands
     ///   - configuration: Configuration settings for video processing
-    public init(commandExecutor: CommandExecutorProtocol, configuration: DIConfiguration) {
+    ///   - fileSystem: File system service for file operations
+    public init(commandExecutor: CommandExecutorProtocol, configuration: DIConfiguration, fileSystem: FileSystemServiceProtocol) {
         self.commandExecutor = commandExecutor
         self.configuration = configuration
+        self.fileSystem = fileSystem
     }
     
     /// Combines multiple video segments into a single output file
@@ -78,9 +84,10 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
     ///   - outputFile: The URL where the combined video file will be saved
     /// 
     /// - Throws: 
-    ///   - `ProcessingError` with code 4007 if no segment files are found
+    ///   - `ProcessingError.ffmpegNotFound` if FFmpeg is not available
+    ///   - `ProcessingError.noValidSegments` if no segment files are found
     ///   - `FileSystemError` if file operations fail
-    ///   - `CommandExecutionError` if FFmpeg execution fails
+    ///   - `ProcessingError` if FFmpeg execution fails
     public func combineSegments(in directory: URL, outputFile: URL) async throws {
         guard let ffmpegCommand = configuration.ffmpegPath else {
             throw ProcessingError.ffmpegNotFound()
@@ -103,7 +110,7 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
             command: ffmpegCommand,
             arguments: arguments,
             workingDirectory: directory.path
-        )   
+        )
     }
     
     /// Decrypts a single video segment using the provided key
@@ -118,9 +125,8 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
     ///   - keyURL: Optional URL to the decryption key file
     /// 
     /// - Throws: 
-    ///   - `FileSystemError` if file operations fail
-    ///   - `CommandExecutionError` if FFmpeg execution fails
-    ///   - `ProcessingError` if decryption fails
+    ///   - `ProcessingError.ffmpegNotFound` if FFmpeg is not available
+    ///   - `ProcessingError` if FFmpeg execution fails or decryption fails
     public func decryptSegment(at url: URL, to outputURL: URL, keyURL: URL?) async throws {
         guard let ffmpegCommand = configuration.ffmpegPath else {
             throw ProcessingError.ffmpegNotFound()
@@ -157,19 +163,18 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
     
     /// Decrypts and combines video segments into a single output file
     /// 
-    /// This method decrypts an encrypted video segment and saves it to the specified
-    /// output location. It supports various encryption methods and automatically
-    /// detects hardware acceleration capabilities.
+    /// This method uses FFmpeg to decrypt encrypted video segments referenced in an M3U8
+    /// playlist file and combines them into a single output video file. It automatically
+    /// detects hardware acceleration capabilities and uses them when available.
     /// 
     /// - Parameters:
-    ///   - directory: The directory containing the video segments
-    ///   - localM3U8FileName: The name of the local M3U8 file
+    ///   - directory: The directory containing the video segments and M3U8 file
+    ///   - localM3U8FileName: The name of the local M3U8 file that references the segments
     ///   - outputFile: The URL where the combined video file will be saved
     /// 
     /// - Throws: 
-    ///   - `ProcessingError` with code 4007 if no segment files are found
-    ///   - `FileSystemError` if file operations fail
-    ///   - `CommandExecutionError` if FFmpeg execution fails
+    ///   - `ProcessingError.ffmpegNotFound` if FFmpeg is not available
+    ///   - `ProcessingError` if FFmpeg execution fails
     public func decryptAndCombineSegments(in directory: URL, with localM3U8FileName: String, outputFile: URL) async throws {
         guard let ffmpegCommand = configuration.ffmpegPath else {
             throw ProcessingError.ffmpegNotFound()
@@ -183,7 +188,7 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
             command: ffmpegCommand,
             arguments: arguments,
             workingDirectory: directory.path
-        )   
+        )
     }
     
     // MARK: - Private Optimized Methods
@@ -202,11 +207,7 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
-                    let contents = try FileManager.default.contentsOfDirectory(
-                        at: directory,
-                        includingPropertiesForKeys: [.fileSizeKey, .creationDateKey],
-                        options: .skipsHiddenFiles
-                    )
+                    let contents = try self.fileSystem.contentsOfDirectory(at: directory)
                     
                     // Filter and sort segments efficiently
                     let segmentFiles = contents
@@ -349,5 +350,3 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
         }
     }
 }
-
-

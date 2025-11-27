@@ -105,8 +105,8 @@ public struct ExponentialBackoffRetryStrategy: RetryStrategy {
             return false
         }
         
-        // Check if the error is retryable
-        return isRetryableError(error)
+        // Check if the error is retryable using shared logic
+        return Self.isRetryableError(error)
     }
     
     public func delayBeforeRetry(attempt: Int) -> TimeInterval {
@@ -122,29 +122,34 @@ public struct ExponentialBackoffRetryStrategy: RetryStrategy {
         return max(0.0, delay) // Ensure non-negative delay
     }
     
-    /// Determines if an error is retryable
+    /// Shared helper to determine if an error is retryable
     /// 
-    /// This method checks if the error is a transient failure that can
-    /// potentially succeed on retry.
+    /// This method is used by all retry strategies to determine if an error
+    /// should be retried. It checks for transient failures that can potentially
+    /// succeed on retry.
     /// 
     /// - Parameter error: The error to check
     /// 
     /// - Returns: `true` if the error is retryable, `false` otherwise
-    private func isRetryableError(_ error: Error) -> Bool {
+    internal static func isRetryableError(_ error: Error) -> Bool {
         // Check for NetworkError types
         if let networkError = error as? NetworkError {
-            // Retry on server errors (5xx) but not client errors (4xx)
+            // Retry on server errors (5xx) and transient errors, but not client errors (4xx)
             switch networkError.code {
-            case 1001: // Network connection error
+            case 1001: // Connection failed - retry (transient)
                 return true
-            case 1003: // Timeout
-                return true
-            case 1004: // Server error
-                return true
-            case 1005: // Client error (4xx) - don't retry
+            case 1002: // Invalid URL - don't retry (permanent)
                 return false
-            case 1006: // Server error (5xx) - retry
+            case 1003: // Timeout - retry (transient)
                 return true
+            case 1004: // Server error (5xx) - retry (transient)
+                return true
+            case 1005: // Client error (4xx) - don't retry (permanent)
+                return false
+            case 1006: // Invalid/unsupported response - don't retry (permanent)
+                return false
+            case 1007: // Unknown error - don't retry (unsafe)
+                return false
             default:
                 return false
             }
@@ -214,9 +219,8 @@ public struct LinearBackoffRetryStrategy: RetryStrategy {
             return false
         }
         
-        // Use the same retry logic as exponential backoff
-        let exponentialStrategy = ExponentialBackoffRetryStrategy()
-        return exponentialStrategy.shouldRetry(error: error, attempt: attempt)
+        // Use shared retry logic
+        return ExponentialBackoffRetryStrategy.isRetryableError(error)
     }
     
     public func delayBeforeRetry(attempt: Int) -> TimeInterval {
@@ -263,9 +267,8 @@ public struct FixedDelayRetryStrategy: RetryStrategy {
             return false
         }
         
-        // Use the same retry logic as exponential backoff
-        let exponentialStrategy = ExponentialBackoffRetryStrategy()
-        return exponentialStrategy.shouldRetry(error: error, attempt: attempt)
+        // Use shared retry logic
+        return ExponentialBackoffRetryStrategy.isRetryableError(error)
     }
     
     public func delayBeforeRetry(attempt: Int) -> TimeInterval {

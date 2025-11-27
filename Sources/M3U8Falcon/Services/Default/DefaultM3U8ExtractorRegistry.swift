@@ -49,29 +49,87 @@ public final class DefaultM3U8ExtractorRegistry: M3U8ExtractorRegistryProtocol, 
     /// Default extractor for fallback
     private let defaultExtractor: M3U8LinkExtractorProtocol
     
+    /// Logger for diagnostic output
+    private let logger: LoggerProtocol
+    
     /// Extractor metadata for tracking (flattened view)
     private var extractorMetadata: [String: ExtractorInfo] = [:]
     
     /// Initializes a new extractor registry
     /// 
-    /// - Parameter defaultExtractor: Default extractor to use when no specific extractor is found
-    private let logger: LoggerProtocol
+    /// - Parameters:
+    ///   - defaultExtractor: Default extractor to use when no specific extractor is found (defaults to creating a DefaultM3U8LinkExtractor with default dependencies)
+    ///   - logger: Logger instance for diagnostic output (defaults to LoggerAdapter)
+    ///   - configuration: Optional configuration to use. If nil, uses `.performanceOptimized()` as fallback.
+    ///     To use the configuration from DI container, use `create()` static method instead.
     
-    public init(defaultExtractor: M3U8LinkExtractorProtocol = DefaultM3U8LinkExtractor(), logger: LoggerProtocol = LoggerAdapter()) {
-        self.defaultExtractor = defaultExtractor
+    public init(
+        defaultExtractor: M3U8LinkExtractorProtocol? = nil,
+        logger: LoggerProtocol = LoggerAdapter(),
+        configuration: DIConfiguration? = nil
+    ) {
+        if let extractor = defaultExtractor {
+            self.defaultExtractor = extractor
+        } else {
+            // Create default extractor with default dependencies
+            let fileSystem = DefaultFileSystemService()
+            let config = configuration ?? .performanceOptimized()
+            let networkClient = DefaultNetworkClient(
+                configuration: config,
+                fileSystem: fileSystem
+            )
+            self.defaultExtractor = DefaultM3U8LinkExtractor(networkClient: networkClient)
+        }
         self.logger = logger
         
         // Register the default extractor
         registerDefaultExtractor()
     }
     
+    /// Creates a new extractor registry using configuration from the DI container
+    /// 
+    /// This static method resolves the configuration from `GlobalDependencies.shared`
+    /// that was set during `M3U8Falcon.initialize()`. If the container is not configured,
+    /// falls back to `.performanceOptimized()`.
+    /// 
+    /// - Parameters:
+    ///   - defaultExtractor: Optional default extractor. If nil, creates one using DI configuration
+    ///   - logger: Logger instance for diagnostic output (defaults to LoggerAdapter)
+    /// 
+    /// - Returns: A new `DefaultM3U8ExtractorRegistry` instance
+    /// 
+    /// ## Usage Example
+    /// ```swift
+    /// // After M3U8Falcon.initialize() has been called
+    /// let registry = await DefaultM3U8ExtractorRegistry.create()
+    /// ```
+    public static func create(
+        defaultExtractor: M3U8LinkExtractorProtocol? = nil,
+        logger: LoggerProtocol = LoggerAdapter()
+    ) async -> DefaultM3U8ExtractorRegistry {
+        let configuration: DIConfiguration
+        if await GlobalDependencies.shared.isConfigured() {
+            // Try to resolve configuration from DI container
+            configuration = (try? await GlobalDependencies.shared.resolve(DIConfiguration.self)) ?? .performanceOptimized()
+        } else {
+            // Fallback if container is not configured
+            configuration = .performanceOptimized()
+        }
+        
+        return DefaultM3U8ExtractorRegistry(
+            defaultExtractor: defaultExtractor,
+            logger: logger,
+            configuration: configuration
+        )
+    }
+    
     /// Registers a new link extractor
     /// 
     /// This method registers an extractor and maps it to its supported domains.
-    /// If multiple extractors support the same domain, the last registered one
-    /// will be used for that domain.
+    /// If multiple extractors support the same domain, the one with higher priority
+    /// will be used. If priorities are equal, the last registered one will be used.
     /// 
-    /// - Parameter extractor: The extractor to register
+    /// - Parameter extractor: The extractor to register (default priority: 100)
     public func registerExtractor(_ extractor: M3U8LinkExtractorProtocol) {
         // Default priority for basic registration
         registerExtractor(extractor, priority: 100)
@@ -221,7 +279,6 @@ public final class DefaultM3U8ExtractorRegistry: M3U8ExtractorRegistryProtocol, 
         
         // Deduplicate same extractor instance-domain by keeping highest priority
         var seen: [String: Registration] = [:]
-        var filtered: [Registration] = []
         for reg in result {
             let key = "\(reg.info.name)@\(reg.domain)"
             if let existing = seen[key] {
@@ -230,8 +287,7 @@ public final class DefaultM3U8ExtractorRegistry: M3U8ExtractorRegistryProtocol, 
                 seen[key] = reg
             }
         }
-        filtered.append(contentsOf: seen.values)
-        return filtered
+        return Array(seen.values)
     }
     
     private func mergeAndSort(linksArrays: [[M3U8Link]]) -> [M3U8Link] {
@@ -265,11 +321,6 @@ extension DefaultM3U8ExtractorRegistry {
         for extractor in extractors {
             registerExtractor(extractor)
         }
-    }
-
-    /// Registers extractor with an explicit priority (higher wins)
-    public func registerExtractorWithPriority(_ extractor: M3U8LinkExtractorProtocol, priority: Int) {
-        registerExtractor(extractor, priority: priority)
     }
     
     /// Unregisters an extractor for a specific domain

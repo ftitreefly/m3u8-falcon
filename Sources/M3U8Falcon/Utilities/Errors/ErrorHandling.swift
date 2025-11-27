@@ -82,6 +82,8 @@ public protocol M3U8FalconError: Error, LocalizedError, Sendable {
 /// - **5001**: Missing required parameter
 /// - **5002**: Invalid parameter value
 /// - **5003**: Unsupported configuration
+/// - **5004**: Service resolution failed
+/// - **5005**: M3U8Falcon not initialized
 /// 
 /// ## Usage Example
 /// ```swift
@@ -121,6 +123,7 @@ public struct ConfigurationError: M3U8FalconError {
         case 5002: return "Check the parameter value against the expected format."
         case 5003: return "Ensure all required configuration is provided."
         case 5004: return "Check the service type and underlying error for more details."
+        case 5005: return "Initialize the M3U8Falcon before using any methods."
         default: return "Verify configuration parameters and retry."
         }
     }
@@ -205,6 +208,18 @@ public struct ConfigurationError: M3U8FalconError {
             parameter: serviceType
         )
     }
+    
+    /// Creates an error for when M3U8Falcon has not been initialized
+    /// 
+    /// - Returns: A configuration error with code 5005
+    public static func notInitialized() -> ConfigurationError {
+        ConfigurationError(
+            code: 5005,
+            underlyingError: nil,
+            message: "M3U8Falcon has not been initialized. Call M3U8Falcon.initialize() first.",
+            parameter: "initialization"
+        )
+    }
 }
 
 // MARK: - Error Result Types
@@ -254,71 +269,30 @@ public enum ErrorHandling {
         }
         
         // Convert common system errors
-        if let nsError = error as NSError? {
-            switch nsError.domain {
-            case NSURLErrorDomain:
-                return NetworkError(
-                    code: 1001,
-                    underlyingError: error,
-                    message: "Network error occurred",
-                    url: nil
-                )
-            case NSCocoaErrorDomain:
-                return FileSystemError(
-                    code: 3001,
-                    underlyingError: error,
-                    message: "File system error occurred",
-                    path: nil
-                )
-            default:
-                return ProcessingError(
-                    code: 4999,
-                    underlyingError: error,
-                    message: "Unknown error occurred",
-                    operation: context
-                )
-            }
+        // Note: In Swift, all Error types can be bridged to NSError, so this cast always succeeds.
+        let nsError = error as NSError
+        switch nsError.domain {
+        case NSURLErrorDomain:
+            return NetworkError(
+                code: 1001,
+                underlyingError: error,
+                message: "Network error occurred",
+                url: nil
+            )
+        case NSCocoaErrorDomain:
+            return FileSystemError(
+                code: 3001,
+                underlyingError: error,
+                message: "File system error occurred",
+                path: nil
+            )
+        default:
+            return ProcessingError(
+                code: 4999,
+                underlyingError: error,
+                message: error.localizedDescription,
+                operation: context
+            )
         }
-        
-        return ProcessingError(
-            code: 4999,
-            underlyingError: error,
-            message: error.localizedDescription,
-            operation: context
-        )
-    }
-    
-    /// Creates a standardized error message with context
-    /// 
-    /// This method enhances an existing error with additional context information,
-    /// making it more useful for debugging and logging.
-    /// 
-    /// - Parameters:
-    ///   - error: The original error to enhance
-    ///   - operation: The operation that was being performed
-    ///   - additionalInfo: Additional context information to include
-    /// 
-    /// - Returns: The enhanced error with additional context
-    /// 
-    /// ## Usage Example
-    /// ```swift
-    /// let error = NetworkError.serverError(url, statusCode: 404)
-    /// let contextualError = ErrorHandling.createContextualError(
-    ///     error,
-    ///     operation: "download playlist",
-    ///     additionalInfo: ["attempt": 3, "timeout": 30]
-    /// )
-    /// ```
-    public static func createContextualError<T: M3U8FalconError>(_ error: T,
-                                                             operation: String,
-                                                             additionalInfo: [String: Any] = [:]) -> T {
-        var newUserInfo = error.userInfo
-        newUserInfo["operation"] = operation
-        for (key, value) in additionalInfo {
-            newUserInfo[key] = value
-        }
-        
-        // Return the error with updated context
-        return error
     }
 } 

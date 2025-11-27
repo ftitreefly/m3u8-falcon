@@ -31,14 +31,14 @@ import FoundationNetworking
 /// let container = DependencyContainer()
 /// 
 /// // Configure with performance-optimized services
-/// container.configurePerformanceOptimized()
+/// container.configure(with: DIConfiguration.performanceOptimized())
 /// 
 /// // Resolve services
-/// let downloader = container.resolve(M3U8DownloaderProtocol.self)
-/// let parser = container.resolve(M3U8ParserServiceProtocol.self)
+/// let downloader = try container.resolve(M3U8DownloaderProtocol.self)
+/// let parser = try container.resolve(M3U8ParserServiceProtocol.self)
 /// 
 /// // Use the global shared instance
-/// let taskManager = Dependencies.resolve(TaskManagerProtocol.self)
+/// let taskManager = try await GlobalDependencies.shared.resolve(TaskManagerProtocol.self)
 /// ```
 public final class DependencyContainer: Sendable {
     
@@ -114,13 +114,14 @@ public final class DependencyContainer: Sendable {
         return try storage.tryResolve(type)
     }
     
-    /// Resolves a service and throws typed configuration errors instead of terminating the process
-    ///
-    /// - Parameter type: The protocol type to resolve
-    /// - Returns: The resolved instance
-    /// - Throws: `ConfigurationError` when service is not registered or cast fails
-    public func tryResolve<T>(_ type: T.Type) throws -> T {
-        return try storage.tryResolve(type)
+    /// Checks if the container is already configured
+    /// 
+    /// This method checks if a key service (DIConfiguration) is registered,
+    /// which indicates that the container has been configured.
+    /// 
+    /// - Returns: `true` if the container is configured, `false` otherwise
+    public func isConfigured() -> Bool {
+        return storage.isConfigured()
     }
     
     /// Configures the container with the specified configuration
@@ -188,12 +189,20 @@ private final class Storage: @unchecked Sendable {
     /// - Parameters:
     ///   - type: The service type to register
     ///   - factory: Factory closure that creates the service
+    /// 
+    /// - Note: The singleton factory ensures thread-safe lazy initialization.
+    ///   The lock is held during the singleton check and creation to prevent race conditions.
     func registerSingleton<T>(_ type: T.Type, factory: @escaping @Sendable () -> T) {
         let key = ObjectIdentifier(type)
         lock.lock()
         defer { lock.unlock() }
         factories[key] = { [weak self] in
             guard let self else { return factory() }
+            
+            // Double-check locking pattern for thread-safe singleton creation
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            
             if let existing = self.singletons[key] as? T {
                 return existing
             }
@@ -203,30 +212,16 @@ private final class Storage: @unchecked Sendable {
         }
     }
     
-    /// Resolves a service instance
+    /// Resolves a service instance with typed error handling
+    /// 
+    /// This method resolves a service from the registered factories, throwing
+    /// `ConfigurationError` instead of calling `fatalError()` for better error handling.
     /// 
     /// - Parameter type: The service type to resolve
     /// 
     /// - Returns: An instance of the requested service
     /// 
-    /// - Throws: Fatal error if service is not registered or cast fails
-    func resolve<T>(_ type: T.Type) -> T {
-        let key = ObjectIdentifier(type)
-        lock.lock()
-        defer { lock.unlock() }
-        
-        guard let factory = factories[key] else {
-            fatalError("Service \(type) not registered. Call configureDefaults() or register the service manually.")
-        }
-        
-        guard let instance = factory() as? T else {
-            fatalError("Failed to cast service to expected type \(type)")
-        }
-        
-        return instance
-    }
-    
-    /// Throwing variant that returns typed configuration errors instead of terminating the process
+    /// - Throws: `ConfigurationError` if service is not registered or cast fails
     func tryResolve<T>(_ type: T.Type) throws -> T {
         let key = ObjectIdentifier(type)
         lock.lock()
@@ -249,6 +244,14 @@ private final class Storage: @unchecked Sendable {
         factories.removeAll(keepingCapacity: false)
         singletons.removeAll(keepingCapacity: false)
         lock.unlock()
+    }
+    
+    /// Checks if the container is configured by verifying if DIConfiguration is registered
+    func isConfigured() -> Bool {
+        let key = ObjectIdentifier(DIConfiguration.self)
+        lock.lock()
+        defer { lock.unlock() }
+        return factories[key] != nil
     }
 }
 
@@ -309,13 +312,22 @@ private extension DependencyContainer {
     }
     
     func registerNetworkLayer(with configuration: DIConfiguration) {
-        registerSingleton(NetworkClientProtocol.self) {
-            DefaultNetworkClient(
+        registerSingleton(NetworkClientProtocol.self) { [weak self] in
+            guard let self = self else {
+                fatalError("Container deallocated during service creation")
+            }
+            
+            guard let fileSystem = try? self.resolve(FileSystemServiceProtocol.self) else {
+                fatalError("Failed to resolve FileSystemServiceProtocol for NetworkClientProtocol")
+            }
+            
+            return DefaultNetworkClient(
                 configuration: configuration,
                 retryStrategy: ExponentialBackoffRetryStrategy(
                     baseDelay: configuration.retryBackoffBase,
                     maxAttempts: configuration.retryAttempts
-                )
+                ),
+                fileSystem: fileSystem
             )
         }
         registerSingleton(LoggerProtocol.self) { LoggerAdapter() }
@@ -329,14 +341,16 @@ private extension DependencyContainer {
             
             guard let commandExecutor = try? self.resolve(CommandExecutorProtocol.self),
                   let configuration = try? self.resolve(DIConfiguration.self),
-                  let net = try? self.resolve(NetworkClientProtocol.self) else {
+                  let net = try? self.resolve(NetworkClientProtocol.self),
+                  let fileSystem = try? self.resolve(FileSystemServiceProtocol.self) else {
                 fatalError("Failed to resolve required dependencies for M3U8DownloaderProtocol. Ensure all services are properly configured.")
             }
             
             return DefaultM3U8Downloader(
                 commandExecutor: commandExecutor,
                 configuration: configuration,
-                networkClient: net
+                networkClient: net,
+                fileSystem: fileSystem
             )
         }
         
@@ -348,20 +362,29 @@ private extension DependencyContainer {
             }
             
             guard let commandExecutor = try? self.resolve(CommandExecutorProtocol.self),
-                  let configuration = try? self.resolve(DIConfiguration.self) else {
+                  let configuration = try? self.resolve(DIConfiguration.self),
+                  let fileSystem = try? self.resolve(FileSystemServiceProtocol.self) else {
                 fatalError("Failed to resolve required dependencies for VideoProcessorProtocol. Ensure all services are properly configured.")
             }
             
             return DefaultVideoProcessor(
                 commandExecutor: commandExecutor,
-                configuration: configuration
+                configuration: configuration,
+                fileSystem: fileSystem
             )
         }
         
-        register(M3U8ExtractorRegistryProtocol.self) {
-            let net = DefaultNetworkClient(configuration: configuration)
+        register(M3U8ExtractorRegistryProtocol.self) { [weak self] in
+            guard let self = self else {
+                fatalError("Container deallocated during service creation")
+            }
+            
+            guard let networkClient = try? self.resolve(NetworkClientProtocol.self) else {
+                fatalError("Failed to resolve NetworkClientProtocol for M3U8ExtractorRegistryProtocol. Ensure all services are properly configured.")
+            }
+            
             return DefaultM3U8ExtractorRegistry(
-                defaultExtractor: DefaultM3U8LinkExtractor(networkClient: net)
+                defaultExtractor: DefaultM3U8LinkExtractor(networkClient: networkClient)
             )
         }
         
@@ -375,7 +398,8 @@ private extension DependencyContainer {
                   let processor = try? self.resolve(VideoProcessorProtocol.self),
                   let fileSystem = try? self.resolve(FileSystemServiceProtocol.self),
                   let configuration = try? self.resolve(DIConfiguration.self),
-                  let networkClient = try? self.resolve(NetworkClientProtocol.self) else {
+                  let networkClient = try? self.resolve(NetworkClientProtocol.self),
+                  let logger = try? self.resolve(LoggerProtocol.self) else {
                 fatalError("Failed to resolve required dependencies for TaskManagerProtocol. Ensure all services are properly configured.")
             }
             
@@ -387,7 +411,7 @@ private extension DependencyContainer {
                 configuration: configuration,
                 maxConcurrentTasks: configuration.maxConcurrentDownloads / 4,
                 networkClient: networkClient,
-                logger: LoggerAdapter()
+                logger: logger
             )
         }
     }
@@ -407,6 +431,10 @@ public actor GlobalDependencies {
     
     public func resolve<T>(_ type: T.Type) throws -> T {
         try container.resolve(type)
+    }
+    
+    public func isConfigured() -> Bool {
+        container.isConfigured()
     }
     
     public func reset() {

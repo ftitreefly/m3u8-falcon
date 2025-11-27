@@ -72,7 +72,13 @@ struct ExtractCommand: AsyncParsableCommand {
         print("🔍 Starting M3U8 link extraction from: \(targetURL)")
         
         // Create extractor registry
-        let registry = DefaultM3U8ExtractorRegistry()
+        let fileSystem = DefaultFileSystemService()
+        let networkClient = DefaultNetworkClient(
+            configuration: .performanceOptimized(),
+            fileSystem: fileSystem
+        )
+        let defaultExtractor = DefaultM3U8LinkExtractor(networkClient: networkClient)
+        let registry = DefaultM3U8ExtractorRegistry(defaultExtractor: defaultExtractor)
         
         // Register demo extractors
         registry.registerExtractor(YouTubeExtractor())

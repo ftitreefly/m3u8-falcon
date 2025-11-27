@@ -88,7 +88,7 @@ public struct FileSystemError: M3U8FalconError {
         )
     }
     
-    // failed to create directory
+    /// Failed to create directory
     public static func failedToCreateDirectory(_ path: String) -> FileSystemError {
         FileSystemError(
             code: 3004,
@@ -98,7 +98,7 @@ public struct FileSystemError: M3U8FalconError {
         )
     }
     
-    // failed to create file
+    /// Failed to create file
     public static func failedToCreateFile(_ path: String) -> FileSystemError {   
         FileSystemError(
             code: 3005,
@@ -108,7 +108,7 @@ public struct FileSystemError: M3U8FalconError {
         )
     }
     
-    // failed to write to file
+    /// Failed to write to file
     public static func failedToWriteToFile(_ path: String) -> FileSystemError {
         FileSystemError(
             code: 3006,
@@ -118,7 +118,7 @@ public struct FileSystemError: M3U8FalconError {
         )
     }
     
-    // failed to read from file
+    /// Failed to read from file
     public static func failedToReadFromFile(_ path: String) -> FileSystemError {
         FileSystemError(
             code: 3007,
@@ -128,7 +128,7 @@ public struct FileSystemError: M3U8FalconError {
         )
     }
     
-    // failed to delete file
+    /// Failed to delete file
     public static func failedToDeleteFile(_ path: String) -> FileSystemError {
         FileSystemError(
             code: 3008,
@@ -138,7 +138,7 @@ public struct FileSystemError: M3U8FalconError {
         )
     }
     
-    // failed to move file
+    /// Failed to move file
     public static func failedToMoveFile(_ path: String) -> FileSystemError {
         FileSystemError(
             code: 3009,
@@ -148,7 +148,7 @@ public struct FileSystemError: M3U8FalconError {
         )
     }
     
-    // failed to copy file
+    /// Failed to copy file
     public static func failedToCopyFile(_ path: String) -> FileSystemError {
         FileSystemError(
             code: 3010,

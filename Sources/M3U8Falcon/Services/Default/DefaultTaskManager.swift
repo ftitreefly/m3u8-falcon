@@ -6,6 +6,7 @@
 //
 
 import Foundation
+
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
@@ -36,11 +37,8 @@ public struct TaskInfo: Sendable {
     /// The download method (web or local)
     let method: Method
     
-    /// Custom AES-128 decryption key (optional)
-    let key: String?
-    
-    /// Custom AES-128 initialization vector (optional)
-    let iv: String?
+    /// Decryption strategy for encrypted segments
+    let decryptionStrategy: DecryptionStrategy
     
     /// Current status of the task
     var status: TaskStatus
@@ -124,7 +122,7 @@ public enum TaskStatus: Sendable {
 ///     TaskRequest(
 ///         url: m3u8URL,
 ///         baseUrl: nil,
-///         savedDirectory: "/path/to/save",
+///         savedDirectory: URL(fileURLWithPath: "/path/to/save"),
 ///         fileName: "my-video",
 ///         method: .web,
 ///         verbose: true
@@ -160,7 +158,7 @@ public actor DefaultTaskManager: TaskManagerProtocol {
     private let logger: LoggerProtocol
     
     /// Temporary directory for processing files
-    private var tempDir: URL = FileManager.default.temporaryDirectory
+    private var tempDir: URL
     
     /// Active tasks indexed by task ID
     private var tasks: [String: TaskInfo] = [:]
@@ -190,6 +188,8 @@ public actor DefaultTaskManager: TaskManagerProtocol {
     ///   - fileSystem: Service for file system operations
     ///   - configuration: Configuration settings (defaults to performance-optimized)
     ///   - maxConcurrentTasks: Maximum number of concurrent tasks (defaults to 3)
+    ///   - networkClient: Network client for HTTP operations
+    ///   - logger: Logger instance for logging operations
     public init(
         downloader: M3U8DownloaderProtocol,
         parser: M3U8ParserServiceProtocol,
@@ -208,6 +208,8 @@ public actor DefaultTaskManager: TaskManagerProtocol {
         self.maxConcurrentTasks = maxConcurrentTasks
         self.networkClient = networkClient
         self.logger = logger
+        // Initialize with default temp directory; will be set to actual temp dir in executeTaskWithMetrics
+        self.tempDir = FileManager.default.temporaryDirectory
     }
     
     /// Creates and executes a new download task
@@ -231,10 +233,14 @@ public actor DefaultTaskManager: TaskManagerProtocol {
         let taskId = generateTaskId(for: request.url)
         activeTasksCount += 1
         
-        logger.debug("Current active tasks: \(activeTasksCount)/\(maxConcurrentTasks)", category: .taskManager)
+        logger.debug(
+            "Current active tasks: \(activeTasksCount)/\(maxConcurrentTasks)",
+            category: .taskManager)
         defer {
             activeTasksCount -= 1
-            logger.debug("Task completed, current active tasks: \(activeTasksCount)/\(maxConcurrentTasks)", category: .taskManager)
+            logger.debug(
+                "Task completed, current active tasks: \(activeTasksCount)/\(maxConcurrentTasks)",
+                category: .taskManager)
         }
         
         var taskInfo = TaskInfo(
@@ -244,8 +250,7 @@ public actor DefaultTaskManager: TaskManagerProtocol {
             savedDirectory: request.savedDirectory,
             fileName: request.fileName,
             method: request.method,
-            key: request.key,
-            iv: request.iv,
+            decryptionStrategy: request.decryptionStrategy,
             status: TaskStatus.pending,
             startTime: Date(),
             metrics: TaskMetrics()
@@ -311,7 +316,8 @@ public actor DefaultTaskManager: TaskManagerProtocol {
     /// - Returns: Performance metrics including average times and task counts
     public func getPerformanceMetrics() async -> PerformanceMetrics {
         let avgDownloadTime = completedTasks > 0 ? totalDownloadTime / Double(completedTasks) : 0
-        let avgProcessingTime = completedTasks > 0 ? totalProcessingTime / Double(completedTasks) : 0
+        let avgProcessingTime =
+            completedTasks > 0 ? totalProcessingTime / Double(completedTasks) : 0
         
         return PerformanceMetrics(
             completedTasks: completedTasks,
@@ -326,17 +332,22 @@ public actor DefaultTaskManager: TaskManagerProtocol {
     
     /// Helper to get output file name
     private func getOutputFileName(from url: URL, customName: String?) -> String {
-        guard let trimmedCustom = customName?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmedCustom.isEmpty else {
+        guard let trimmedCustom = customName?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !trimmedCustom.isEmpty
+        else {
             return url.deletingPathExtension().lastPathComponent + ".mp4"
         }
-        return URL(fileURLWithPath: trimmedCustom).pathExtension.isEmpty ? trimmedCustom + ".mp4" : trimmedCustom
+        return URL(fileURLWithPath: trimmedCustom).pathExtension.isEmpty
+            ? trimmedCustom + ".mp4" : trimmedCustom
     }
     
     /// Helper to format download progress display
     private func displayProgress(completed: Int, total: Int, speed: Double, startTime: Date) {
         let percentage = Double(completed) / Double(total) * 100
         let speedFormatted = formatBytes(Int64(speed))
-        print("\r📊 Starting download \(completed)/\(total) segments (\(String(format: "%.1f", percentage))%) | Speed: \(speedFormatted)/s", terminator: "")
+        print(
+            "\r📊 Starting download \(completed)/\(total) segments (\(String(format: "%.1f", percentage))%) | Speed: \(speedFormatted)/s",
+            terminator: "")
         fflush(nil)
         if completed == total { print("") }
     }
@@ -352,14 +363,17 @@ public actor DefaultTaskManager: TaskManagerProtocol {
     /// - Parameters:
     ///   - taskInfo: The task information to execute
     ///   - verbose: Whether to output detailed information
-    private func executeTaskWithMetrics(taskInfo: inout TaskInfo, verbose: Bool = false) async throws {
+    private func executeTaskWithMetrics(taskInfo: inout TaskInfo, verbose: Bool = false)
+        async throws
+    {
         self.tempDir = try fileSystem.createTemporaryDirectory(taskInfo.url.absoluteString)
         
         logger.debug("Creating temporary directory: \(tempDir.path)", category: .fileSystem)
         
         // Step 1: Download and parse M3U8
         let downloadStartTime = Date()
-        let (content, effectiveBaseUrl) = try await downloadAndParseContent(taskInfo: taskInfo, verbose: verbose)
+        let (content, effectiveBaseUrl) = try await downloadAndParseContent(
+            taskInfo: taskInfo, verbose: verbose)
         guard !content.isEmpty else {
             throw ProcessingError.emptyContent()
         }
@@ -375,7 +389,8 @@ public actor DefaultTaskManager: TaskManagerProtocol {
         switch parseResult {
         case .media(let mediaPlaylist):
             try await processUpdateCustomKeyAndIV(mediaPlaylist, taskInfo: &taskInfo)
-            try await processMediaPlaylistOptimized(mediaPlaylist, taskInfo: &taskInfo, verbose: verbose)
+            try await processMediaPlaylistOptimized(
+                mediaPlaylist, taskInfo: &taskInfo, verbose: verbose)
         case .master:
             throw ProcessingError.masterPlaylistsNotSupported()
         case .cancelled:
@@ -386,7 +401,9 @@ public actor DefaultTaskManager: TaskManagerProtocol {
         
         // Step 4: Copy file
         try processCopyFile(taskInfo)
-        logger.debug("File saved to \(taskInfo.savedDirectory) | Size: \(formatBytes(taskInfo.metrics.totalBytes)) data", category: .fileSystem)
+        logger.debug(
+            "File saved to \(taskInfo.savedDirectory) | Size: \(formatBytes(taskInfo.metrics.totalBytes)) data",
+            category: .fileSystem)
         
         // Step 5: Clean up
         try fileSystem.removeItem(at: tempDir)
@@ -401,14 +418,17 @@ public actor DefaultTaskManager: TaskManagerProtocol {
     /// - Parameters:
     ///   - taskInfo: The task information to download and parse
     ///   - verbose: Whether to output detailed information
-    private func downloadAndParseContent(taskInfo: TaskInfo, verbose: Bool = false) async throws -> (String, URL) {
+    private func downloadAndParseContent(taskInfo: TaskInfo, verbose: Bool = false) async throws
+        -> (String, URL)
+    {
         if case .local = taskInfo.method {
             logger.debug("Reading from local file: \(taskInfo.url.path)", category: .fileSystem)
             let content = try fileSystem.content(at: taskInfo.url)
             let baseUrl = taskInfo.baseUrl ?? taskInfo.url.deletingLastPathComponent()
             return (content, baseUrl)
         } else {
-            logger.debug("Downloading from network: \(taskInfo.url.absoluteString)", category: .network)
+            logger.debug(
+                "Downloading from network: \(taskInfo.url.absoluteString)", category: .network)
             let content = try await downloader.downloadContent(from: taskInfo.url)
             let baseUrl = taskInfo.baseUrl ?? taskInfo.url.deletingLastPathComponent()
             
@@ -431,9 +451,28 @@ public actor DefaultTaskManager: TaskManagerProtocol {
     ///   - taskInfo: The task information to update
     /// - Throws: `ProcessingError` if the m3u8 file cannot be updated
     private func processUpdateCustomKeyAndIV(_ playlist: MediaPlaylist, taskInfo: inout TaskInfo) async throws {
-        if taskInfo.key != nil || taskInfo.iv != nil {
+        guard taskInfo.decryptionStrategy != .normal else {
+            return
+        }
+        
+        var key: String?
+        var iv: String?
+
+        if case .customAES128(let decryptionKey, let decryptionIV) = taskInfo.decryptionStrategy {
+            key = decryptionKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "0x", with: "")
+                .replacingOccurrences(of: "0X", with: "")
+            iv = decryptionIV?.trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "0x", with: "")
+                .replacingOccurrences(of: "0X", with: "")
+        }
+
+        guard key != nil || iv != nil else {
+            return
+        }
+
             logger.debug("Custom key/iv are provided, will update local m3u8 file...", category: .processing)
-                let m3u8Content = try String(contentsOf: tempDir.appendingPathComponent(Constants.FileNames.localM3U8), encoding: .utf8)
+        let m3u8Content = try String(contentsOf: self.tempDir.appendingPathComponent(Constants.FileNames.localM3U8), encoding: .utf8)
 
             if let keySegment = playlist.tags.keySegments.first {
                 var newKeyLine = "#EXT-X-KEY:"
@@ -441,13 +480,13 @@ public actor DefaultTaskManager: TaskManagerProtocol {
                     newKeyLine += "METHOD=\(keySegment.method.uppercased())"
                 }
 
-                if let _ = taskInfo.key {
+            if key != nil {
                     newKeyLine += ",URI=\"\(Constants.FileNames.decryptionKey)\""
                 } else {
                     newKeyLine += ",URI=\"\(keySegment.uri)\""
                 }
 
-                if let iv = taskInfo.iv {
+            if let iv = iv {
                     newKeyLine += ",IV=0x\(iv)"
                 } else {
                     newKeyLine += ",IV=0x\(keySegment.iv)"
@@ -455,9 +494,13 @@ public actor DefaultTaskManager: TaskManagerProtocol {
 
                 let m3u8Path = tempDir.appendingPathComponent(Constants.FileNames.localM3U8)
                 var newContent = m3u8Content
-                let keyRegex = try NSRegularExpression(pattern: #"^#EXT-X-KEY:.*$"#, options: [.anchorsMatchLines])
+            let keyRegex = try NSRegularExpression(
+                pattern: #"^#EXT-X-KEY:.*$"#, options: [.anchorsMatchLines])
                 if keyRegex
-                    .firstMatch(in: newContent, options: [], range: NSRange(location: 0, length: newContent.utf16.count)) != nil {
+                .firstMatch(
+                    in: newContent, options: [],
+                    range: NSRange(location: 0, length: newContent.utf16.count)) != nil
+            {
                     newContent = keyRegex.stringByReplacingMatches(
                         in: newContent,
                         options: [],
@@ -469,14 +512,13 @@ public actor DefaultTaskManager: TaskManagerProtocol {
             }
 
             // create key file
-            if let key = taskInfo.key {
+        if let key = key {
                 let keyFileURL = tempDir.appendingPathComponent(Constants.FileNames.decryptionKey)
                 guard let keyData = Data(hexString: key) else {
                     throw ProcessingError.invalidHexString(key)
                 }
                 try keyData.write(to: keyFileURL, options: .atomic)
                 logger.debug("Custom key file created at \(keyFileURL.path)", category: .fileSystem)
-            }
         }
     }
     
@@ -490,7 +532,9 @@ public actor DefaultTaskManager: TaskManagerProtocol {
     ///   - playlist: The media playlist to process
     ///   - taskInfo: The task information to update
     ///   - verbose: Whether to output detailed information
-    private func processMediaPlaylistOptimized(_ playlist: MediaPlaylist, taskInfo: inout TaskInfo, verbose: Bool = false) async throws { 
+    private func processMediaPlaylistOptimized(
+        _ playlist: MediaPlaylist, taskInfo: inout TaskInfo, verbose: Bool = false
+    ) async throws {
         // Extract and validate segment URLs
         let segmentURLs = playlist.tags.mediaSegments.compactMap { segment in
             URL(string: segment.uri, relativeTo: playlist.baseUrl)
@@ -503,14 +547,18 @@ public actor DefaultTaskManager: TaskManagerProtocol {
         taskInfo.metrics.segmentCount = segmentURLs.count
         
         // Download segments with progress tracking
-        try await downloadSegmentsWithProgress(segmentURLs, to: tempDir, taskInfo: &taskInfo, verbose: verbose)
+        try await downloadSegmentsWithProgress(
+            segmentURLs, to: tempDir, taskInfo: &taskInfo, verbose: verbose)
         
         // Calculate and display total bytes processed
         taskInfo.metrics.totalBytes = try await calculateTotalBytes(in: tempDir)
-        logger.debug("Total processed: \(formatBytes(taskInfo.metrics.totalBytes)) data", category: .download)
+        logger.debug(
+            "Total processed: \(formatBytes(taskInfo.metrics.totalBytes)) data", category: .download
+        )
         
         // Combine segments
-        let outputPath = tempDir.appendingPathComponent(getOutputFileName(from: taskInfo.url, customName: nil))
+        let outputPath = tempDir.appendingPathComponent(
+            getOutputFileName(from: taskInfo.url, customName: nil))
         // check if m3u8 file is encrypted
         if !playlist.tags.keySegments.isEmpty {
             logger.debug("Decrypting video segments, and combining...", category: .processing)
@@ -541,15 +589,19 @@ public actor DefaultTaskManager: TaskManagerProtocol {
         let sizeInfo = formatBytes(taskInfo.metrics.totalBytes)
         
         let originalName = getOutputFileName(from: taskInfo.url, customName: nil)
-        if FileManager.default.fileExists(atPath: outputPath.path) {
+        if fileSystem.fileExists(at: outputPath) {
             let ext = (outputFileName as NSString).pathExtension
             let base = (outputFileName as NSString).deletingPathExtension
             let newFileName = ext.isEmpty ? "\(base)_1" : "\(base)_1.\(ext)"
             let newOutputPath = taskInfo.savedDirectory.appendingPathComponent(newFileName)
-            try? fileSystem.copyItem(at: tempDir.appendingPathComponent(originalName), to: newOutputPath)
-            print("✅ File already exists, try to rename as \(newOutputPath.path) | Size: \(sizeInfo) data")
+            try? fileSystem.copyItem(
+                at: tempDir.appendingPathComponent(originalName), to: newOutputPath)
+            print(
+                "✅ File already exists, try to rename as \(newOutputPath.path) | Size: \(sizeInfo) data"
+            )
         } else {
-            try fileSystem.copyItem(at: tempDir.appendingPathComponent(originalName), to: outputPath)
+            try fileSystem.copyItem(
+                at: tempDir.appendingPathComponent(originalName), to: outputPath)
             print("✅ File saved as \(outputPath.path) | Size: \(sizeInfo) data")
         }
     }
@@ -557,21 +609,18 @@ public actor DefaultTaskManager: TaskManagerProtocol {
     /// Calculate the total bytes of all files in a directory
     /// 
     /// This method calculates the total size of all files in a given directory,
-    /// including hidden files.
+    /// excluding hidden files.
     /// 
     /// - Parameter directory: The directory to calculate the total bytes of
     private func calculateTotalBytes(in directory: URL) async throws -> Int64 {
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
                 do {
-                    let contents = try FileManager.default.contentsOfDirectory(
-                        at: directory,
-                        includingPropertiesForKeys: [.fileSizeKey],
-                        options: .skipsHiddenFiles
-                    )
+                    let contents = try self.fileSystem.contentsOfDirectory(at: directory)
                     
                     let totalBytes = contents.reduce(Int64(0)) { total, url in
-                        let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+                        let fileSize =
+                            (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
                         return total + Int64(fileSize)
                     }
                     
@@ -604,7 +653,9 @@ public actor DefaultTaskManager: TaskManagerProtocol {
     ///   - directory: Destination directory
     ///   - taskInfo: Task info to update
     ///   - verbose: Whether to print verbose progress lines
-    private func downloadSegmentsWithProgress(_ urls: [URL], to directory: URL, taskInfo: inout TaskInfo, verbose: Bool = false) async throws {
+    private func downloadSegmentsWithProgress(
+        _ urls: [URL], to directory: URL, taskInfo: inout TaskInfo, verbose: Bool = false
+    ) async throws {
         let (totalSegments, downloadStartTime) = (urls.count, Date())
         var (completedSegments, totalDownloadedBytes) = (0, Int64(0))
         
@@ -620,7 +671,8 @@ public actor DefaultTaskManager: TaskManagerProtocol {
                 let url = urls[urlIndex]
                 let index = urlIndex
                 group.addTask {
-                    let downloadedBytes = try await self.downloadSingleSegmentWithProgress(url: url, to: directory, config: self.configuration)
+                    let downloadedBytes = try await self.downloadSingleSegmentWithProgress(
+                        url: url, to: directory, config: self.configuration)
                     return (index, downloadedBytes)
                 }
                 activeDownloads += 1
@@ -652,7 +704,8 @@ public actor DefaultTaskManager: TaskManagerProtocol {
                     let url = urls[urlIndex]
                     let index = urlIndex
                     group.addTask {
-                        let downloadedBytes = try await self.downloadSingleSegmentWithProgress(url: url, to: directory, config: self.configuration)
+                        let downloadedBytes = try await self.downloadSingleSegmentWithProgress(
+                            url: url, to: directory, config: self.configuration)
                         return (index, downloadedBytes)
                     }
                     activeDownloads += 1
@@ -672,7 +725,9 @@ public actor DefaultTaskManager: TaskManagerProtocol {
     ///   - directory: The directory to write the downloaded segment to
     ///   - config: The configuration to use for the download
     /// - Returns: The number of bytes downloaded
-    private func downloadSingleSegmentWithProgress(url: URL, to directory: URL, config: DIConfiguration) async throws -> Int64 {
+    private func downloadSingleSegmentWithProgress(
+        url: URL, to directory: URL, config: DIConfiguration
+    ) async throws -> Int64 {
         var request = URLRequest(url: url, timeoutInterval: config.downloadTimeout)
         
         // Add default headers
@@ -682,18 +737,22 @@ public actor DefaultTaskManager: TaskManagerProtocol {
         
         let (location, response) = try await networkClient.download(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            try? FileManager.default.removeItem(at: location)
-            throw NetworkError.serverError(url, statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
+            try? fileSystem.removeItem(at: location)
+            throw NetworkError.serverError(
+                url, statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
         }
         
         let destinationURL = directory.appendingPathComponent(url.lastPathComponent)
-        if FileManager.default.fileExists(atPath: destinationURL.path) {
-            try FileManager.default.removeItem(at: destinationURL)
+        if fileSystem.fileExists(at: destinationURL) {
+            try fileSystem.removeItem(at: destinationURL)
         }
-        try FileManager.default.moveItem(at: location, to: destinationURL)
+        // Move the downloaded file from temporary location to destination
+        try fileSystem.copyItem(at: location, to: destinationURL)
+        try? fileSystem.removeItem(at: location) // Clean up temp file
         
-        let attributes = try FileManager.default.attributesOfItem(atPath: destinationURL.path)
-        return attributes[.size] as? Int64 ?? 0
+        // Get file size using resource values
+        let fileSize = (try? destinationURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+        return Int64(fileSize)
     }
 }
  
@@ -722,5 +781,3 @@ public struct PerformanceMetrics: Sendable {
     /// Note: For concurrent tasks, this may exceed the actual wall-clock time.
     public let cumulativeTaskTime: TimeInterval
 }
-
-

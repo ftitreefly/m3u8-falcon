@@ -28,9 +28,11 @@ import FoundationNetworking
 /// 
 /// ## Usage Example
 /// ```swift
+/// let fileSystem = DefaultFileSystemService()
 /// let client = DefaultNetworkClient(
 ///     configuration: .performanceOptimized(),
-///     retryStrategy: ExponentialBackoffRetryStrategy()
+///     retryStrategy: ExponentialBackoffRetryStrategy(),
+///     fileSystem: fileSystem
 /// )
 /// 
 /// let request = URLRequest(url: url)
@@ -46,6 +48,9 @@ public actor DefaultNetworkClient: NetworkClientProtocol {
     /// Retry strategy for failed requests
     private let retryStrategy: RetryStrategy
     
+    /// File system service for file operations
+    private let fileSystem: FileSystemServiceProtocol
+    
     /// Request counter for tracking
     private var requestCount: Int = 0
     
@@ -54,9 +59,11 @@ public actor DefaultNetworkClient: NetworkClientProtocol {
     /// - Parameters:
     ///   - configuration: Configuration settings for the client
     ///   - retryStrategy: Strategy for retrying failed requests (default: exponential backoff)
+    ///   - fileSystem: File system service for file operations
     public init(
         configuration: DIConfiguration,
-        retryStrategy: RetryStrategy = ExponentialBackoffRetryStrategy()
+        retryStrategy: RetryStrategy = ExponentialBackoffRetryStrategy(),
+        fileSystem: FileSystemServiceProtocol
     ) {
         // Configure URLSession with optimized settings
         let sessionConfig = URLSessionConfiguration.default
@@ -94,6 +101,7 @@ public actor DefaultNetworkClient: NetworkClientProtocol {
         self.session = URLSession(configuration: sessionConfig)
         self.configuration = configuration
         self.retryStrategy = retryStrategy
+        self.fileSystem = fileSystem
     }
     
     /// Performs a network request with automatic retry logic
@@ -113,9 +121,17 @@ public actor DefaultNetworkClient: NetworkClientProtocol {
     }
     
     /// Downloads content to a temporary file with automatic retry logic
-    ///
+    /// 
+    /// This method downloads content to a temporary file and automatically retries
+    /// on transient failures according to the configured retry strategy.
+    /// 
     /// - Parameter request: The URL request to execute
+    /// 
     /// - Returns: A tuple containing the temporary file URL and URL response
+    /// 
+    /// - Throws: 
+    ///   - `NetworkError` for various network failures
+    ///   - The last error encountered if all retries fail
     public nonisolated func download(for request: URLRequest) async throws -> (URL, URLResponse) {
         return try await performDownloadWithRetry(request: request)
     }
@@ -140,7 +156,10 @@ public actor DefaultNetworkClient: NetworkClientProtocol {
                 let (data, response) = try await session.data(for: request)
                 
                 // Validate the response
-                try validateResponse(response, data: data, url: request.url!)
+                guard let url = request.url else {
+                    throw NetworkError.invalidURL("Request URL is nil")
+                }
+                try validateResponse(response, data: data, url: url)
                 
                 // Log success
                 if attempt > 0 {
@@ -194,10 +213,14 @@ public actor DefaultNetworkClient: NetworkClientProtocol {
                 let (location, response) = try await session.download(for: request)
                 
                 // Validate response (clean up temp file if invalid)
+                guard let url = request.url else {
+                    try? fileSystem.removeItem(at: location)
+                    throw NetworkError.invalidURL("Request URL is nil")
+                }
                 do {
-                    try validateResponse(response, data: Data(), url: request.url!)
+                    try validateResponse(response, data: Data(), url: url)
                 } catch {
-                    try? FileManager.default.removeItem(at: location)
+                    try? fileSystem.removeItem(at: location)
                     throw error
                 }
                 
@@ -245,7 +268,7 @@ public actor DefaultNetworkClient: NetworkClientProtocol {
             
         case 400...499:
             // Client errors - don't retry
-            throw NetworkError.clientError(url,statusCode: statusCode)
+            throw NetworkError.clientError(url, statusCode: statusCode)
             
         case 500...599:
             // Server errors - can retry
@@ -274,4 +297,3 @@ public actor DefaultNetworkClient: NetworkClientProtocol {
         requestCount = 0
     }
 }
-

@@ -54,6 +54,9 @@ public actor ResourceManager {
     /// Registry of managed resources
     private var managedResources: [String: ManagedResource] = [:]
     
+    /// File system service for file operations
+    private let fileSystem: FileSystemServiceProtocol
+    
     /// Maximum age for automatic cleanup (in seconds)
     private let maxResourceAge: TimeInterval
     
@@ -63,12 +66,15 @@ public actor ResourceManager {
     /// Initializes a new resource manager
     /// 
     /// - Parameters:
+    ///   - fileSystem: File system service for file operations
     ///   - maxResourceAge: Maximum age for resources before auto-cleanup (default: 1 hour)
     ///   - autoCleanupOnDeinit: Whether to cleanup all resources on deinit (default: true)
     public init(
+        fileSystem: FileSystemServiceProtocol,
         maxResourceAge: TimeInterval = 3600,
         autoCleanupOnDeinit: Bool = true
     ) {
+        self.fileSystem = fileSystem
         self.maxResourceAge = maxResourceAge
         self.autoCleanupOnDeinit = autoCleanupOnDeinit
     }
@@ -86,14 +92,15 @@ public actor ResourceManager {
         prefix: String = "tfm3u8",
         autoCleanup: Bool = true
     ) throws -> URL {
+        // Use FileManager.default.temporaryDirectory as base path
+        // (fileSystem is FileSystemServiceProtocol, not PathProviderProtocol)
         let tempDir = FileManager.default.temporaryDirectory
         let uniqueName = "\(prefix)-\(UUID().uuidString)"
         let url = tempDir.appendingPathComponent(uniqueName, isDirectory: true)
         
-        try FileManager.default.createDirectory(
+        try fileSystem.createDirectory(
             at: url,
-            withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700] // Owner only
+            withIntermediateDirectories: true
         )
         
         register(
@@ -263,8 +270,8 @@ public actor ResourceManager {
     
     /// Performs the actual cleanup of a resource
     private func performCleanup(url: URL) throws {
-        if FileManager.default.fileExists(atPath: url.path) {
-            try FileManager.default.removeItem(at: url)
+        if fileSystem.fileExists(at: url) {
+            try fileSystem.removeItem(at: url)
         }
     }
     
@@ -298,7 +305,7 @@ public actor ResourceManager {
         if autoCleanupOnDeinit {
             // Synchronously cleanup resources on deinit
             for (_, resource) in managedResources where resource.autoCleanup {
-                try? FileManager.default.removeItem(at: resource.url)
+                try? fileSystem.removeItem(at: resource.url)
             }
         }
     }

@@ -16,18 +16,30 @@ import FoundationNetworking
 /// from various types of web pages using multiple extraction methods.
 /// 
 /// ## Features
-/// - Direct M3U8 link detection in page source
-/// - JavaScript variable extraction
-/// - API endpoint discovery
-/// - HTML video element parsing
-/// - Regular expression pattern matching
+/// - Direct M3U8 link detection in page source using regex patterns
+/// - JavaScript variable extraction from embedded scripts
+/// - HTML video element parsing (`<video>` and `<source>` tags)
+/// - Regular expression pattern matching with multiple strategies
 /// - Support for multiple domains and platforms
+/// - Custom headers and User-Agent support
+/// - Reuses network client to avoid connection churn
 /// 
 /// ## Usage Example
 /// ```swift
-/// let extractor = DefaultM3U8LinkExtractor()
-/// let options = LinkExtractionOptions.default
+/// // Create extractor with network client
+/// let fileSystem = DefaultFileSystemService()
+/// let networkClient = DefaultNetworkClient(
+///     configuration: .performanceOptimized(),
+///     fileSystem: fileSystem
+/// )
+/// let extractor = DefaultM3U8LinkExtractor(networkClient: networkClient)
 /// 
+/// // Or, after M3U8Falcon.initialize(), use DI container
+/// await M3U8Falcon.initialize()
+/// let networkClient = try await GlobalDependencies.shared.resolve(NetworkClientProtocol.self)
+/// let extractor = DefaultM3U8LinkExtractor(networkClient: networkClient)
+/// 
+/// let options = LinkExtractionOptions.default
 /// let links = try await extractor.extractM3U8Links(
 ///     from: URL(string: "https://example.com/video")!,
 ///     options: options
@@ -39,9 +51,6 @@ import FoundationNetworking
 ///     print("Confidence: \(link.confidence)")
 /// }
 /// ```
-/// Default implementation of a general-purpose M3U8 link extractor.
-///
-/// Notes: Reuses a single URLSession to avoid connection churn; supports custom headers and User-Agent.
 public final class DefaultM3U8LinkExtractor: M3U8LinkExtractorProtocol {
     
     /// Supported domains for this extractor
@@ -74,7 +83,7 @@ public final class DefaultM3U8LinkExtractor: M3U8LinkExtractorProtocol {
     ///   - logger: Logger implementation for diagnostic output
     public init(
         supportedDomains: [String] = [],
-        networkClient: NetworkClientProtocol = DefaultNetworkClient(configuration: .performanceOptimized()),
+        networkClient: NetworkClientProtocol,
         logger: LoggerProtocol = LoggerAdapter()
     ) {
         self.supportedDomains = supportedDomains
@@ -188,6 +197,13 @@ public final class DefaultM3U8LinkExtractor: M3U8LinkExtractorProtocol {
     // MARK: - Network
     
     /// Extracts links using a specific method
+    /// 
+    /// - Parameters:
+    ///   - method: The extraction method to use
+    ///   - content: The page content to search
+    ///   - baseURL: The base URL of the page
+    ///   - options: Extraction options (currently unused but kept for future extensibility)
+    /// - Returns: Array of found M3U8 links
     private func extractLinksUsingMethod(_ method: ExtractionMethod, from content: String, baseURL: URL, options: LinkExtractionOptions) async throws -> [M3U8Link] {
         switch method {
         case .directLinks:
@@ -196,7 +212,10 @@ public final class DefaultM3U8LinkExtractor: M3U8LinkExtractorProtocol {
             return extractFromJavaScript(from: content, baseURL: baseURL)
         case .videoElements:
             return extractFromVideoElements(from: content, baseURL: baseURL)
-        default:
+        case .apiEndpoints, .structuredData, .regexPatterns:
+            // These methods are not yet implemented
+            // They are included in the enum for future extensibility
+            logger.debug("Extraction method \(method.description) is not yet implemented", category: .extraction)
             return []
         }
     }

@@ -32,7 +32,8 @@ final class CombineTests {
         httpSystem = DefaultM3U8Downloader(
             commandExecutor: NoopCommandExecutor(),
             configuration: testEnv.configuration,
-            networkClient: realNetworkClient
+            networkClient: realNetworkClient,
+            fileSystem: testEnv.fileSystem
         )
         
         fileSystem = testEnv.fileSystem

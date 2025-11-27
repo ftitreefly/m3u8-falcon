@@ -22,15 +22,22 @@ import M3U8Falcon
 /// # Download with custom filename
 /// m3u8-falcon download https://example.com/video.m3u8 --name my-video
 /// 
+/// # Download to custom directory
+/// m3u8-falcon download https://example.com/video.m3u8 --output /path/to/videos
+/// 
 /// # Download with verbose output
 /// m3u8-falcon download https://example.com/video.m3u8 -v
 /// 
-/// # Download with both custom name and verbose output
-/// m3u8-falcon download https://example.com/video.m3u8 --name my-video -v
+/// # Download encrypted content with custom decryption key
+/// m3u8-falcon download https://example.com/video.m3u8 --key 0123456789abcdef0123456789abcdef
+/// 
+/// # Download encrypted content with both key and IV
+/// m3u8-falcon download https://example.com/video.m3u8 --key 0123456789abcdef0123456789abcdef --iv 0123456789abcdef0123456789abcdef
 /// ```
 /// 
 /// ## Output
-/// Downloaded files will be saved to the user's Downloads directory with the following structure:
+/// Downloaded files will be saved to the user's Downloads directory by default,
+/// or to a custom directory if specified with the `--output` option.
 struct DownloadCommand: AsyncParsableCommand {
     /// Command configuration including name and description
     static let configuration = CommandConfiguration(
@@ -42,12 +49,13 @@ struct DownloadCommand: AsyncParsableCommand {
         Supported features:
         - Automatically download all video segments in the playlist
         - Support for HTTP and HTTPS URLs
-        - Customizable output filename
+        - Customizable output filename and directory
         - Detailed download progress information
         - Error handling and retry mechanisms
-        - Support for encrypted M3U8 files with custom decryption key and IV
+        - Support for encrypted M3U8 files with custom AES-128 decryption (key and IV)
         
-        Downloaded files will be saved to the user's Downloads directory by default.
+        Downloaded files will be saved to the user's Downloads directory by default,
+        or to a custom directory if specified with the --output option.
         """,
         version: CLI.version
     )
@@ -67,6 +75,15 @@ struct DownloadCommand: AsyncParsableCommand {
     /// Example: `--name my-video` will save the file as `my-video.mp4`
     @Option(name: [.short, .long], help: "Output filename (saved as .mp4)")
     var name: String?
+    
+    /// Optional custom directory to save downloaded files
+    /// 
+    /// If provided, files will be saved to this directory instead of the default Downloads folder.
+    /// The directory will be created if it doesn't exist.
+    /// 
+    /// Example: `--output /path/to/videos` will save files to `/path/to/videos`
+    @Option(name: [.short, .long], help: "Output directory for downloaded files (defaults to Downloads folder)")
+    var output: String?
 
     /// Enable verbose output for detailed download information
     /// 
@@ -99,19 +116,16 @@ struct DownloadCommand: AsyncParsableCommand {
     /// 1. Initializes the dependency injection container
     /// 2. Validates the provided URL
     /// 3. Downloads the M3U8 file and all associated segments
-    /// 4. Saves files to the Downloads directory
+    /// 4. Saves files to the specified output directory (or Downloads directory by default)
     /// 5. Provides status updates and error handling
     /// 
     /// - Throws: 
     ///   - `ExitCode.failure` if URL is invalid or download fails
     ///   - Various network and file system errors during download
     mutating func run() async throws {
-        // Ensure DI is configured (idempotent) - must be called before validateFFmpegAvailability
         await M3U8Falcon.initialize()
         
         try await validateFFmpegAvailability()
-
-        let outputDirectory = await resolveOutputDirectory()
             
         guard let downloadURL = URL(string: url) else {
             OutputFormatter.printError("Invalid URL format")
@@ -133,14 +147,29 @@ struct DownloadCommand: AsyncParsableCommand {
                 }
             }
             
+            // Build decryption strategy if key is provided
+            let strategy: DecryptionStrategy?
+            if let key = key {
+                strategy = .customAES128(key: key, iv: iv)
+            } else {
+                strategy = nil
+            }
+            
+            // Resolve output directory
+            let outputDirectory: URL?
+            if let outputPath = output {
+                outputDirectory = URL(fileURLWithPath: outputPath, isDirectory: true)
+            } else {
+                outputDirectory = nil // Uses default Downloads directory
+            }
+            
             try await M3U8Falcon.download(
                 .web,
                 url: downloadURL,
                 savedDirectory: outputDirectory,
                 name: name,
-                verbose: verbose,
-                key: key,
-                iv: iv
+                strategy: strategy,
+                verbose: verbose
             )
             if verbose { 
                 OutputFormatter.printSuccess("Download completed!")
@@ -224,118 +253,6 @@ private extension DownloadCommand {
         }
     }
 
-    /// Resolves the default output directory, handling Linux-specific cases
-    func resolveOutputDirectory() async -> URL {
-        if let provider = try? await GlobalDependencies.shared.resolve(PathProviderProtocol.self) {
-            let directory = provider.downloadsDirectory()
-            if ensureDirectoryExists(directory) {
-                return directory
-            }
-        }
-
-        #if os(Linux)
-        if let xdgPath = resolveXDGDownloadDir(), ensureDirectoryExists(xdgPath) {
-            return xdgPath
-        }
-        #endif
-
-        let fallback = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Downloads", isDirectory: true)
-        _ = ensureDirectoryExists(fallback)
-        return fallback
-    }
-
-    @discardableResult
-    func ensureDirectoryExists(_ url: URL) -> Bool {
-        var isDirectory: ObjCBool = false
-        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) {
-            return isDirectory.boolValue
-        }
-
-        do {
-            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-            return true
-        } catch {
-            OutputFormatter.printWarning("Failed to create directory at \(url.path): \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    #if os(Linux)
-    func resolveXDGDownloadDir() -> URL? {
-        if let envPath = ProcessInfo.processInfo.environment["XDG_DOWNLOAD_DIR"], !envPath.isEmpty {
-            return normalizeXDGPath(envPath)
-        }
-
-        let configFile = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config", isDirectory: true)
-            .appendingPathComponent("user-dirs.dirs", isDirectory: false)
-
-        guard let contents = try? String(contentsOf: configFile, encoding: .utf8) else {
-            return nil
-        }
-
-        for line in contents.split(whereSeparator: \.isNewline) {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard trimmed.hasPrefix("XDG_DOWNLOAD_DIR=") else { continue }
-
-            let valueStart = trimmed.index(trimmed.startIndex, offsetBy: "XDG_DOWNLOAD_DIR=".count)
-            var value = trimmed[valueStart...].trimmingCharacters(in: .whitespacesAndNewlines)
-            value = value.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-
-            if let url = normalizeXDGPath(String(value)) {
-                return url
-            }
-        }
-
-        return nil
-    }
-
-    func normalizeXDGPath(_ rawPath: String) -> URL? {
-        guard !rawPath.isEmpty else { return nil }
-        var path = rawPath
-        
-        // Expand all environment variables in the format $VAR or ${VAR}
-        let environment = ProcessInfo.processInfo.environment
-        
-        // Pattern for ${VAR} format
-        var pattern = #/\$\{([A-Z_][A-Z0-9_]*)\}/#
-        while let match = path.firstMatch(of: pattern) {
-            let varName = String(match.1)
-            if let value = environment[varName] {
-                path = path.replacingOccurrences(of: "${\(varName)}", with: value)
-            } else {
-                // If variable not found, leave it as is or remove
-                path = path.replacingOccurrences(of: "${\(varName)}", with: "")
-            }
-        }
-        
-        // Pattern for $VAR format (word boundary)
-        pattern = #/\$([A-Z_][A-Z0-9_]*)/#
-        while let match = path.firstMatch(of: pattern) {
-            let varName = String(match.1)
-            if let value = environment[varName] {
-                path = path.replacingOccurrences(of: "$\(varName)", with: value)
-            } else {
-                // If variable not found, leave it as is or remove
-                path = path.replacingOccurrences(of: "$\(varName)", with: "")
-            }
-        }
-        
-        // Expand tilde after environment variables (in case ~ was in an env var)
-        if path.hasPrefix("~") {
-            path = (path as NSString).expandingTildeInPath
-        }
-        
-        // Final validation - path must be absolute after expansion
-        guard path.hasPrefix("/") else {
-            return nil
-        }
-        
-        return URL(fileURLWithPath: path, isDirectory: true)
-    }
-    #endif
-    
     /// Prints performance metrics if available
     func printPerformanceMetrics() async {
         do {

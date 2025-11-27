@@ -54,7 +54,8 @@ struct TestEnvironment {
         DefaultM3U8Downloader(
             commandExecutor: NoopCommandExecutor(),
             configuration: configuration,
-            networkClient: mockNetworkClient
+            networkClient: mockNetworkClient,
+            fileSystem: fileSystem
         )
     }
     

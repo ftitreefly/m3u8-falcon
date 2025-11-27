@@ -185,8 +185,6 @@ public struct LoggerConfiguration: Sendable {
 /// ```
 public struct Logger: LoggerProtocol {
     public init() {}
-    /// The current configuration for the logger (accessed via configQueue)
-    // Configuration is managed by LoggerState below
     
     /// Thread-safe queue for emitting logs
     private static let logQueue = DispatchQueue(label: "com.m3u8falcon.logger", qos: .utility)
@@ -236,6 +234,9 @@ public struct Logger: LoggerProtocol {
         Logger.log(.info, message: "⚠️  \(message)", category: category, file: file, function: function, line: line)
     }
     
+    // MARK: - Static Logging Methods
+    // Convenience methods that capture call-site location for direct static usage
+    
     /// Log a message at the error level
     /// 
     /// - Parameters:
@@ -244,7 +245,6 @@ public struct Logger: LoggerProtocol {
     ///   - file: The source file (automatically captured)
     ///   - function: The source function (automatically captured)
     ///   - line: The source line number (automatically captured)
-    // Convenience overloads that capture call-site location for direct static usage
     public static func error(
         _ message: String,
         category: LogCategory = .general,
@@ -393,6 +393,10 @@ public struct Logger: LoggerProtocol {
     ) {
         // Snapshot configuration safely
         let cfg = state.getConfig()
+        // Log if the message level is at or below the minimum level
+        // (lower numeric values = more important, so we want level <= minimumLevel)
+        // Example: if minimumLevel = .error (1), log only .error (1) and .none (0)
+        //          if minimumLevel = .info (2), log .error (1), .info (2), and .none (0)
         guard level <= cfg.minimumLevel else { return }
         
         logQueue.async {
@@ -517,6 +521,10 @@ public extension Logger {
         category: LogCategory = .general,
         with config: LoggerConfiguration
     ) {
+        // Check if this level should be logged with the provided config
+        // (lower numeric values = more important, so we want level <= minimumLevel)
+        guard level <= config.minimumLevel else { return }
+        
         // Emit with a temporary configuration without mutating global state
         let formatted = Logger.formatMessage(
             level: level,
@@ -551,25 +559,8 @@ public struct LoggerAdapter: LoggerProtocol {
 }
 
 
-public extension LoggerProtocol {
-    func error(_ message: String, category: LogCategory, file: String = #fileID, function: String = #function, line: Int = #line) {
-        self.error(message, category: category, file: file, function: function, line: line)
-    }
-    func info(_ message: String, category: LogCategory, file: String = #fileID, function: String = #function, line: Int = #line) {
-        self.info(message, category: category, file: file, function: function, line: line)
-    }
-    func debug(_ message: String, category: LogCategory, file: String = #fileID, function: String = #function, line: Int = #line) {
-        self.debug(message, category: category, file: file, function: function, line: line)
-    }
-    func verbose(_ message: String, category: LogCategory, file: String = #fileID, function: String = #function, line: Int = #line) {
-        self.verbose(message, category: category, file: file, function: function, line: line)
-    }
-    func warning(_ message: String, category: LogCategory, file: String = #fileID, function: String = #function, line: Int = #line) {
-        self.warning(message, category: category, file: file, function: function, line: line)
-    }
-}
-
 // Convenience overloads so call sites can omit file/function/line and still capture them here.
+// These methods call the protocol-required methods with default parameters, avoiding infinite recursion.
 public extension LoggerProtocol {
     func error(_ message: String, category: LogCategory) {
         self.error(message, category: category, file: #fileID, function: #function, line: #line)

@@ -22,7 +22,7 @@ public struct DefaultFileSystemService: FileSystemServiceProtocol, PathProviderP
     /// - Parameters:
     ///   - url: Destination directory URL
     ///   - withIntermediateDirectories: Whether to create missing intermediates
-    /// - Throws: `FileSystemError` from underlying `FileManager` on failure
+    /// - Throws: Foundation errors (e.g., `CocoaError`) from `FileManager` on failure
     public func createDirectory(at url: URL, withIntermediateDirectories: Bool) throws {
         try FileManager.default.createDirectory(
             at: url,
@@ -41,7 +41,7 @@ public struct DefaultFileSystemService: FileSystemServiceProtocol, PathProviderP
     /// Removes a file or directory
     /// 
     /// - Parameter url: URL to remove
-    /// - Throws: `FileSystemError` from underlying `FileManager` on failure
+    /// - Throws: Foundation errors (e.g., `CocoaError`) from `FileManager` on failure
     public func removeItem(at url: URL) throws {
         try FileManager.default.removeItem(at: url)
     }
@@ -51,7 +51,7 @@ public struct DefaultFileSystemService: FileSystemServiceProtocol, PathProviderP
     /// The directory name includes a stable or random suffix to avoid collisions.
     /// - Parameter saltString: Optional salt to generate a deterministic suffix
     /// - Returns: URL of the created temporary directory
-    /// - Throws: `FileSystemError` from underlying `FileManager` on failure
+    /// - Throws: Foundation errors (e.g., `CocoaError`) from `FileManager` on failure
     public func createTemporaryDirectory(_ saltString: String? = nil) throws -> URL {
         let suffixString = saltString.map { String($0.hash, radix: 16).uppercased() } ?? UUID().uuidString
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("M3U8Falcon_".appending(suffixString))
@@ -76,7 +76,7 @@ public struct DefaultFileSystemService: FileSystemServiceProtocol, PathProviderP
     /// 
     /// - Parameter url: Directory URL
     /// - Returns: Array of item URLs
-    /// - Throws: `FileSystemError` from underlying `FileManager` on failure
+    /// - Throws: Foundation errors (e.g., `CocoaError`) from `FileManager` on failure
     public func contentsOfDirectory(at url: URL) throws -> [URL] {
         return try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
     }
@@ -86,17 +86,101 @@ public struct DefaultFileSystemService: FileSystemServiceProtocol, PathProviderP
     /// - Parameters:
     ///   - sourceURL: Source file URL
     ///   - destinationURL: Destination file URL
-    /// - Throws: `FileSystemError` from underlying `FileManager` on failure
+    /// - Throws: Foundation errors (e.g., `CocoaError`) from `FileManager` on failure
     public func copyItem(at sourceURL: URL, to destinationURL: URL) throws {
         try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
     }
     
     // MARK: - PathProviderProtocol
     /// Returns the user's Downloads directory
+    /// 
+    /// On Linux, this method checks XDG environment variables and configuration files
+    /// before falling back to the standard Downloads directory. On macOS and other
+    /// platforms, it uses the system's standard Downloads directory.
     public func downloadsDirectory() -> URL {
+        #if os(Linux)
+        // Try XDG_DOWNLOAD_DIR environment variable first
+        if let envPath = ProcessInfo.processInfo.environment["XDG_DOWNLOAD_DIR"], !envPath.isEmpty {
+            if let xdgURL = normalizeXDGPath(envPath) {
+                return xdgURL
+            }
+        }
+        
+        // Try reading from user-dirs.dirs config file
+        let configFile = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config", isDirectory: true)
+            .appendingPathComponent("user-dirs.dirs", isDirectory: false)
+        
+        if let contents = try? String(contentsOf: configFile, encoding: .utf8) {
+            for line in contents.split(whereSeparator: \.isNewline) {
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard trimmed.hasPrefix("XDG_DOWNLOAD_DIR=") else { continue }
+                
+                let valueStart = trimmed.index(trimmed.startIndex, offsetBy: "XDG_DOWNLOAD_DIR=".count)
+                var value = trimmed[valueStart...].trimmingCharacters(in: .whitespacesAndNewlines)
+                value = value.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                
+                if let xdgURL = normalizeXDGPath(String(value)) {
+                    return xdgURL
+                }
+            }
+        }
+        #endif
+        
+        // Fallback to standard system method
         let urls = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)
         return (urls.first ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads"))
     }
+    
+    #if os(Linux)
+    /// Normalizes and expands XDG path strings
+    /// 
+    /// Expands environment variables in the format $VAR or ${VAR} and tilde (~)
+    /// to create a valid absolute path URL.
+    private func normalizeXDGPath(_ rawPath: String) -> URL? {
+        guard !rawPath.isEmpty else { return nil }
+        var path = rawPath
+        
+        // Expand all environment variables in the format $VAR or ${VAR}
+        let environment = ProcessInfo.processInfo.environment
+        
+        // Pattern for ${VAR} format
+        var pattern = #/\$\{([A-Z_][A-Z0-9_]*)\}/#
+        while let match = path.firstMatch(of: pattern) {
+            let varName = String(match.1)
+            if let value = environment[varName] {
+                path = path.replacingOccurrences(of: "${\(varName)}", with: value)
+            } else {
+                // If variable not found, remove it
+                path = path.replacingOccurrences(of: "${\(varName)}", with: "")
+            }
+        }
+        
+        // Pattern for $VAR format
+        pattern = #/\$([A-Z_][A-Z0-9_]*)/#
+        while let match = path.firstMatch(of: pattern) {
+            let varName = String(match.1)
+            if let value = environment[varName] {
+                path = path.replacingOccurrences(of: "$\(varName)", with: value)
+            } else {
+                // If variable not found, remove it
+                path = path.replacingOccurrences(of: "$\(varName)", with: "")
+            }
+        }
+        
+        // Expand tilde after environment variables (in case ~ was in an env var)
+        if path.hasPrefix("~") {
+            path = (path as NSString).expandingTildeInPath
+        }
+        
+        // Final validation - path must be absolute after expansion
+        guard path.hasPrefix("/") else {
+            return nil
+        }
+        
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }
+    #endif
     
     /// Returns the process temporary directory
     public func temporaryDirectory() -> URL {

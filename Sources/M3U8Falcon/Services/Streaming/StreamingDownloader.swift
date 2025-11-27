@@ -27,9 +27,11 @@ import FoundationNetworking
 /// 
 /// ## Usage Example
 /// ```swift
+/// let fileSystem = DefaultFileSystemService()
 /// let downloader = StreamingDownloader(
 ///     networkClient: client,
 ///     streamingClient: streamingClient,
+///     fileSystem: fileSystem,
 ///     bufferSize: 256 * 1024  // 256 KB buffer
 /// )
 /// 
@@ -48,6 +50,9 @@ public actor StreamingDownloader {
     /// The streaming network client for byte stream downloads
     private let streamingClient: StreamingNetworkClientProtocol
     
+    /// File system service for file operations
+    private let fileSystem: FileSystemServiceProtocol
+    
     /// Buffer size for streaming (default: 256 KB)
     private let bufferSize: Int
     
@@ -59,14 +64,17 @@ public actor StreamingDownloader {
     /// - Parameters:
     ///   - networkClient: The network client to use for requests
     ///   - streamingClient: Platform-specific streaming client (injected via DI)
+    ///   - fileSystem: File system service for file operations
     ///   - bufferSize: Size of the buffer for streaming (default: 256 KB)
     public init(
         networkClient: NetworkClientProtocol,
         streamingClient: StreamingNetworkClientProtocol,
+        fileSystem: FileSystemServiceProtocol,
         bufferSize: Int = 256 * 1024
     ) {
         self.networkClient = networkClient
         self.streamingClient = streamingClient
+        self.fileSystem = fileSystem
         self.bufferSize = bufferSize
     }
     
@@ -91,24 +99,43 @@ public actor StreamingDownloader {
         // Validate response and get content length
         let (byteStream, response) = try await fetchAsyncBytes(from: url)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw NetworkError.serverError(
-                url,
-                statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0
-            )
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NetworkError.invalidResponse(url)
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            let statusCode = httpResponse.statusCode
+            if (400...499).contains(statusCode) {
+                throw NetworkError.clientError(url, statusCode: statusCode)
+            } else if (500...599).contains(statusCode) {
+                throw NetworkError.serverError(url, statusCode: statusCode)
+            } else {
+                throw NetworkError.invalidResponse(url)
+            }
         }
         
         let totalBytes = httpResponse.expectedContentLength > 0 
             ? httpResponse.expectedContentLength 
             : nil
         
-        // Create destination file
-        _ = FileManager.default.createFile(
+        // Ensure parent directory exists
+        let parentDirectory = destination.deletingLastPathComponent()
+        if !fileSystem.fileExists(at: parentDirectory) {
+            try fileSystem.createDirectory(at: parentDirectory, withIntermediateDirectories: true)
+        }
+        
+        // Create destination file (FileHandle is a low-level API, so we use FileManager directly)
+        // If file already exists, createFile returns false but FileHandle can still open it for writing
+        if !FileManager.default.createFile(
             atPath: destination.path,
             contents: nil,
             attributes: [.posixPermissions: 0o644]
-        )
+        ) {
+            // File might already exist, try to open it anyway
+            if !fileSystem.fileExists(at: destination) {
+                throw FileSystemError.failedToCreateFile(destination.path)
+            }
+        }
         
         guard let fileHandle = FileHandle(forWritingAtPath: destination.path) else {
             throw FileSystemError.failedToCreateFile(destination.path)
@@ -153,7 +180,7 @@ public actor StreamingDownloader {
             
             try fileHandle.synchronize()
         } catch {
-            try? FileManager.default.removeItem(at: destination)
+            try? fileSystem.removeItem(at: destination)
             throw error
         }
     }
@@ -176,12 +203,19 @@ public actor StreamingDownloader {
     ) async throws -> Data {
         let (byteStream, response) = try await fetchAsyncBytes(from: url)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw NetworkError.serverError(
-                url,
-                statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0
-            )
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NetworkError.invalidResponse(url)
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            let statusCode = httpResponse.statusCode
+            if (400...499).contains(statusCode) {
+                throw NetworkError.clientError(url, statusCode: statusCode)
+            } else if (500...599).contains(statusCode) {
+                throw NetworkError.serverError(url, statusCode: statusCode)
+            } else {
+                throw NetworkError.invalidResponse(url)
+            }
         }
         
         let totalBytes = httpResponse.expectedContentLength > 0 

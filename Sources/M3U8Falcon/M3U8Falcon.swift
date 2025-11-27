@@ -23,11 +23,9 @@ import Foundation
 /// try await M3U8Falcon.download(
 ///     .web,
 ///     url: URL(string: "https://example.com/video.m3u8")!,
-///     savedDirectory: "/path/to/save",
+    ///     savedDirectory: URL(fileURLWithPath: "/path/to/save"),
 ///     name: "my-video"
-/// ) { progress in
-///     print("Download progress: \(progress)")
-/// }
+    /// )
 /// 
 /// // Parse an M3U8 file
 /// let result = try await M3U8Falcon.parse(
@@ -38,11 +36,12 @@ public struct M3U8Falcon {
     
     /// Initializes the dependency injection container with default services
     /// 
-    /// This method must be called once at the start of your application to configure
-    /// the dependency injection container with the appropriate services.
+    /// **This method must be called before using `download()` or `parse()` methods.**
+    /// It configures the dependency injection container with the appropriate services.
     /// 
     /// - Parameter configuration: Custom configuration for dependency injection. 
     ///   If not provided, uses performance-optimized configuration by default.
+    ///   The logger is automatically configured based on `configuration.logLevel`.
     /// - Note: Safe to call multiple times; subsequent calls reconfigure services.
     /// 
     /// ## Usage Example
@@ -50,13 +49,16 @@ public struct M3U8Falcon {
     /// // Use default configuration
     /// await M3U8Falcon.initialize()
     /// 
-    /// // Use custom configuration
-    /// let config = DIConfiguration()
-    /// config.maxConcurrentDownloads = 10
+    /// // Use custom configuration with verbose logging
+    /// let config = DIConfiguration(
+    ///     maxConcurrentDownloads: 10,
+    ///     logLevel: .verbose
+    /// )
     /// await M3U8Falcon.initialize(with: config)
     /// ```
     @MainActor public static func initialize(with configuration: DIConfiguration = DIConfiguration.performanceOptimized()) async {
         await GlobalDependencies.shared.configure(with: configuration)
+        Logger.debug("Concurrent file downloads count: \(configuration.maxConcurrentDownloads), single file download timeout: \(configuration.downloadTimeout) seconds", category: .download)
     }
     
     /// Downloads M3U8 content from a URL and processes it using dependency injection
@@ -69,14 +71,16 @@ public struct M3U8Falcon {
     ///   - url: The URL to download from (must be a valid M3U8 playlist URL)
     ///   - savedDirectory: Directory to save the downloaded content. Defaults to user's Downloads folder
     ///   - name: Optional name for the output file. If not provided, uses the original filename
-    ///   - configuration: Configuration settings for the download operation
-    ///   - verbose: Whether to output detailed information during the download process
-    ///   - key: Custom AES-128 decryption key (hex string, optional). Overrides playlist key URL
-    ///   - iv: Custom AES-128 initialization vector (hex string, optional). Overrides playlist IV
+    ///   - strategy: Optional decryption strategy for encrypted segments. If `nil`, defaults to `.normal` (no decryption).
+    ///     Use `.customAES128(key:iv:)` for AES-128 encrypted streams with custom key/IV.
+    ///   - verbose: Whether to output detailed operation-specific information (progress, etc.). 
+    ///     Note: Global logger verbosity is set in `initialize()`, this only affects operation-specific output.
+    /// - Precondition: `initialize()` must be called before calling this method.
     /// - Precondition: When `method == .web`, network connectivity is required.
     /// - Precondition: When `method == .local`, `url` must point to a readable local `.m3u8` file.
     /// 
     /// - Throws: 
+    ///   - `ConfigurationError.notInitialized()` if `initialize()` has not been called
     ///   - `FileSystemError.failedToCreateDirectory` if directory creation fails
     ///   - `NetworkError` if network requests fail
     ///   - `ParsingError` if M3U8 parsing fails
@@ -84,69 +88,63 @@ public struct M3U8Falcon {
     /// 
     /// ## Usage Example
     /// ```swift
+    /// // Initialize first (required)
+    /// await M3U8Falcon.initialize()
+    /// 
+    /// // Then download (savedDirectory is optional, defaults to Downloads folder)
     /// try await M3U8Falcon.download(
     ///     .web,
     ///     url: URL(string: "https://example.com/video.m3u8")!,
-    ///     savedDirectory: "/Users/username/Downloads/videos/",
     ///     name: "my-video",
-    ///     configuration: DIConfiguration.performanceOptimized(),
-    ///     verbose: true,
-    ///     key: "0123456789abcdef0123456789abcdef",
-    ///     iv: "0123456789abcdef0123456789abcdef"
+    ///     verbose: true
+    /// )
+    /// 
+    /// // Download with custom AES-128 decryption
+    /// try await M3U8Falcon.download(
+    ///     .web,
+    ///     url: URL(string: "https://example.com/encrypted-video.m3u8")!,
+    ///     name: "encrypted-video",
+    ///     strategy: .customAES128(
+    ///         key: "0123456789abcdef0123456789abcdef",
+    ///         iv: "0123456789abcdef0123456789abcdef"
+    ///     )
+    /// )
+    /// 
+    /// // Or specify a custom directory
+    /// try await M3U8Falcon.download(
+    ///     .web,
+    ///     url: URL(string: "https://example.com/video.m3u8")!,
+    ///     savedDirectory: URL(fileURLWithPath: "/Users/username/Downloads/videos/"),
+    ///     name: "my-video"
     /// )
     /// ```
     public static func download(
         _ method: Method = .web,
         url: URL,
-        savedDirectory: URL?,
+        savedDirectory: URL? = nil,
         name: String? = nil,
-        configuration: DIConfiguration = DIConfiguration.performanceOptimized(),
-        verbose: Bool = false,
-        key: String? = nil,
-        iv: String? = nil
+        strategy: DecryptionStrategy? = nil,
+        verbose: Bool = false
     ) async throws {
-        await GlobalDependencies.shared.configure(with: configuration)
-        
-        Logger.configure(verbose ? .verbose() : .production())
-        Logger.debug("Concurrent file downloads count: \(configuration.maxConcurrentDownloads), single file download timeout: \(configuration.downloadTimeout) seconds", category: .download)
-
-        let finalSavedDirectory: URL
-        if savedDirectory == nil {
-            let paths = try await GlobalDependencies.shared.resolve(PathProviderProtocol.self)
-            finalSavedDirectory = paths.downloadsDirectory()
-        } else {
-            finalSavedDirectory = savedDirectory!
+        guard await GlobalDependencies.shared.isConfigured() else {
+            throw ConfigurationError.notInitialized()
         }
         
-        let fileSystem = try await GlobalDependencies.shared.resolve(FileSystemServiceProtocol.self)
-        if !fileSystem.fileExists(at: finalSavedDirectory) {
-            do {
-                try fileSystem.createDirectory(at: finalSavedDirectory, withIntermediateDirectories: true)
-            } catch {
-                throw FileSystemError.failedToCreateDirectory(finalSavedDirectory.path)
-            }
-        }
-        
+        let resolvedDirectory = try await resolvedDirectory(savedDirectory)
         
         let baseUrl = method.baseURL ?? url.deletingLastPathComponent()
 
-        let cleanedKey = key?.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "0x", with: "")
-            .replacingOccurrences(of: "0X", with: "")
-
-        let cleanedIV = iv?.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "0x", with: "")
-            .replacingOccurrences(of: "0X", with: "")
+        // Use provided strategy or default to .normal
+        let decryptionStrategy = strategy ?? .normal
 
         let request = TaskRequest(
             url: url,
             baseUrl: baseUrl,
-            savedDirectory: finalSavedDirectory,
+            savedDirectory: resolvedDirectory,
             fileName: name,
             method: method,
             verbose: verbose,
-            key: cleanedKey,
-            iv: cleanedIV
+            decryptionStrategy: decryptionStrategy
         )
 
         let taskManager = try await GlobalDependencies.shared.resolve(TaskManagerProtocol.self)
@@ -161,22 +159,25 @@ public struct M3U8Falcon {
     /// - Parameters:
     ///   - url: The URL of the M3U8 file to parse
     ///   - method: The parsing method to use (`.web` for HTTP/HTTPS, `.local` for local files)
-    ///   - configuration: Configuration settings for the parsing operation
+    /// - Precondition: `initialize()` must be called before calling this method.
+    /// - Precondition: When `method == .local`, `url` must be a readable file URL.
     /// 
     /// - Returns: A `M3U8Parser.ParserResult` containing the parsed playlist data
     /// 
     /// - Throws: 
+    ///   - `ConfigurationError.notInitialized()` if `initialize()` has not been called
     ///   - `ParsingError` if the M3U8 content cannot be parsed
     ///   - `NetworkError` if network requests fail
     ///   - `FileSystemError.failedToReadFromFile` if local file reading fails
-    /// - Precondition: When `method == .local`, `url` must be a readable file URL.
     /// 
     /// ## Usage Example
     /// ```swift
+    /// // Initialize first (required)
+    /// await M3U8Falcon.initialize()
+    /// 
     /// // Parse from web URL
     /// let result = try await M3U8Falcon.parse(
-    ///     url: URL(string: "https://example.com/video.m3u8")!,
-    ///     configuration: DIConfiguration.performanceOptimized()
+    ///     url: URL(string: "https://example.com/video.m3u8")!
     /// )
     /// 
     /// switch result {
@@ -191,27 +192,25 @@ public struct M3U8Falcon {
     /// // Parse local file
     /// let localResult = try await M3U8Falcon.parse(
     ///     url: URL(fileURLWithPath: "/path/to/local/playlist.m3u8"),
-    ///     method: .local,
-    ///     configuration: DIConfiguration.performanceOptimized()
+    ///     method: .local
     /// )
     /// ```
     public static func parse(
         url: URL,
-        method: Method = .web,
-        configuration: DIConfiguration = DIConfiguration.performanceOptimized()
+        method: Method = .web
     ) async throws -> M3U8Parser.ParserResult {
-        await GlobalDependencies.shared.configure(with: configuration)
+        guard await GlobalDependencies.shared.isConfigured() else {
+            throw ConfigurationError.notInitialized()
+        }
         let downloader = try await GlobalDependencies.shared.resolve(M3U8DownloaderProtocol.self)
         let parser = try await GlobalDependencies.shared.resolve(M3U8ParserServiceProtocol.self)
+        let fileSystem = try await GlobalDependencies.shared.resolve(FileSystemServiceProtocol.self)
         
         do {
             let baseURL: URL
             
             if case .local = method {
-                guard let localFileData = FileManager.default.contents(atPath: url.path),
-                        let localFileContent = String(data: localFileData, encoding: .utf8) else {
-                    throw FileSystemError.failedToReadFromFile(url.path)
-                }
+                let localFileContent = try fileSystem.content(at: url)
                 baseURL = url.deletingLastPathComponent()
                 return try parser.parseContent(localFileContent, baseURL: baseURL, type: .media)
             } else {
@@ -220,8 +219,10 @@ public struct M3U8Falcon {
                 return try parser.parseContent(content, baseURL: baseURL, type: .media)
             }
         } catch let error as ParsingError {
+            // Re-throw ParsingError as-is to preserve error details
             throw error
         } catch {
+            // Wrap other errors in ParsingError for consistent error handling
             throw ParsingError(
                 code: 2999,
                 underlyingError: error,
@@ -229,5 +230,36 @@ public struct M3U8Falcon {
                 context: "URL: \(url.absoluteString)"
             )
         }
+    }
+    
+    /// Resolves the final directory (provided or default) and ensures it exists
+    /// 
+    /// - Parameter savedDirectory: Optional directory path. If `nil`, uses the default Downloads directory.
+    /// - Returns: The resolved directory URL that is guaranteed to exist
+    /// - Throws: `FileSystemError.failedToCreateDirectory` if directory creation fails
+    private static func resolvedDirectory(_ savedDirectory: URL?) async throws -> URL {
+        let directory: URL
+        if let savedDirectory = savedDirectory {
+            directory = savedDirectory
+        } else {
+            directory = try await GlobalDependencies.shared.resolve(PathProviderProtocol.self).downloadsDirectory()
+        }
+        
+        let fileSystem = try await GlobalDependencies.shared.resolve(FileSystemServiceProtocol.self)
+        
+        // Check if directory already exists
+        // Note: fileExists returns true for both files and directories, but createDirectory
+        // will fail if a file exists at this path, which will be caught and rethrown below
+        guard !fileSystem.fileExists(at: directory) else {
+            return directory
+        }
+        
+        do {
+            try fileSystem.createDirectory(at: directory, withIntermediateDirectories: true)
+        } catch {
+            throw FileSystemError.failedToCreateDirectory(directory.path)
+        }
+        
+        return directory
     }
 }

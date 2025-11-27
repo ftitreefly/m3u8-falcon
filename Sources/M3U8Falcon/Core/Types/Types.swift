@@ -13,14 +13,8 @@ import Foundation
 /// 
 /// This enum defines the available methods for accessing M3U8 content,
 /// whether from web URLs or local files.
-public enum Method: Sendable, Equatable {
-  /// Download from web URL (HTTP/HTTPS)
-  case web
-  /// Load from local file system
-  case local
-}
-
-/// Usage Example
+/// 
+/// ## Usage Example
 /// ```swift
 /// // Web download
 /// try await M3U8Falcon.download(.web, url: remoteURL, savedDirectory: outputDir)
@@ -28,6 +22,54 @@ public enum Method: Sendable, Equatable {
 /// // Local parse
 /// let result = try await M3U8Falcon.parse(url: localFileURL, method: .local)
 /// ```
+public enum Method: Sendable, Equatable {
+  /// Download from web URL (HTTP/HTTPS)
+  case web
+  /// Load from local file system
+  case local
+}
+
+// MARK: - Decryption Strategy
+
+/// Represents different decryption strategies for encrypted M3U8 segments
+/// 
+/// This enum defines how encrypted video segments should be decrypted during download.
+/// 
+/// ## Usage Example
+/// ```swift
+/// // No decryption (default)
+/// try await M3U8Falcon.download(.web, url: url, strategy: .normal)
+/// 
+/// // Custom AES-128 decryption with key and IV
+/// try await M3U8Falcon.download(
+///     .web,
+///     url: url,
+///     strategy: .customAES128(
+///         key: "0123456789abcdef0123456789abcdef",
+///         iv: "0123456789abcdef0123456789abcdef"
+///     )
+/// )
+/// 
+/// // Custom AES-128 decryption with key only (IV derived from segment sequence)
+/// try await M3U8Falcon.download(
+///     .web,
+///     url: url,
+///     strategy: .customAES128(key: "0123456789abcdef0123456789abcdef")
+/// )
+/// ```
+public enum DecryptionStrategy: Sendable, Equatable {
+    /// No decryption - segments are not encrypted
+    case normal
+    
+    /// Custom AES-128 decryption - requires a decryption key and optionally an initialization vector (IV)
+    /// 
+    /// This strategy uses a custom key and IV provided by the user, overriding any keys specified in the M3U8 playlist.
+    /// 
+    /// - Parameters:
+    ///   - key: The decryption key (required)
+    ///   - iv: The initialization vector (optional, will use segment sequence number if not provided)
+    case customAES128(key: String, iv: String? = nil)
+}
 
 // MARK: - Download Quality
 
@@ -250,7 +292,8 @@ extension Method {
   /// Base URL for resolving relative URLs
   /// 
   /// Returns the base URL that should be used for resolving relative URLs
-  /// in the M3U8 playlist. Currently returns nil for all methods.
+  /// in the M3U8 playlist. Currently returns `nil` for all methods, meaning
+  /// relative URLs should be resolved using the M3U8 file's URL.
   public var baseURL: URL? {
     return nil
   }

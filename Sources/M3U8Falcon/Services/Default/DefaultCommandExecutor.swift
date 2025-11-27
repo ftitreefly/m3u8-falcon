@@ -44,12 +44,8 @@ public struct DefaultCommandExecutor: CommandExecutorProtocol {
     if let executor = processExecutor {
       self.processExecutor = executor
     } else {
-      // Auto-select based on platform
-      #if canImport(Darwin)
-      self.processExecutor = DarwinProcessExecutor()
-      #else
-      self.processExecutor = LinuxProcessExecutor()
-      #endif
+      // Auto-select based on platform using typealias
+      self.processExecutor = DefaultProcessExecutor()
     }
   }
   
@@ -65,7 +61,8 @@ public struct DefaultCommandExecutor: CommandExecutorProtocol {
   /// - Returns: The command output as a string
   /// 
   /// - Throws: 
-  ///   - `CommandExecutionError.processError` if the process fails
+  ///   - `ProcessingError.commandFailed` if the process fails with non-zero exit code
+  ///   - `ProcessingError.platformError` for other platform-specific errors
   /// 
   /// ## Usage Example
   /// ```swift

@@ -63,16 +63,15 @@ dependencies: [
 ```swift
 import M3U8Falcon
 
-// Initialize the library
+// ⚠️ IMPORTANT: Initialize the library first (required)
 await M3U8Falcon.initialize()
 
 // Download a video from M3U8 URL
+// savedDirectory is optional - defaults to Downloads folder
 try await M3U8Falcon.download(
     .web,
     url: URL(string: "https://example.com/video.m3u8")!,
-    savedDirectory: URL(fileURLWithPath: "~/Downloads/"),
-    name: "my-video",
-    verbose: true
+    name: "my-video"
 )
 
 print("✅ Video downloaded successfully!")
@@ -92,183 +91,6 @@ m3u8-falcon extract "https://example.com/video-page"
 ```
 
 That's it! For more advanced features, see the sections below.
-
----
-
-## 🔌 M3U8LinkExtractorProtocol - Core Integration Interface
-
-`M3U8LinkExtractorProtocol` is the core extensibility interface of M3U8Falcon, enabling third-party developers to easily integrate M3U8 link extraction functionality for various video websites.
-
-### Protocol Overview
-
-```swift
-public protocol M3U8LinkExtractorProtocol: Sendable {
-    /// Extract M3U8 links from a web page
-    func extractM3U8Links(from url: URL, options: LinkExtractionOptions) async throws -> [M3U8Link]
-    
-    /// Return the list of domains supported by this extractor
-    func getSupportedDomains() -> [String]
-    
-    /// Return complete information about this extractor
-    func getExtractorInfo() -> ExtractorInfo
-    
-    /// Check if this extractor can handle the specified URL
-    func canHandle(url: URL) -> Bool
-}
-```
-
-### Complete Working Example
-
-Here's a complete, runnable example showing how to implement a custom M3U8 extractor:
-
-```swift
-import Foundation
-import M3U8Falcon
-
-// 1️⃣ Create a custom extractor
-final class CustomVideoSiteExtractor: M3U8LinkExtractorProtocol {
-    
-    private let supportedDomains = ["example.com", "video.example.com"]
-    
-    public init() {}
-    
-    // Core method for extracting M3U8 links
-    public func extractM3U8Links(from url: URL, options: LinkExtractionOptions) async throws -> [M3U8Link] {
-        // Download web page content
-        let (data, _) = try await URLSession.shared.data(from: url)
-        guard let html = String(data: data, encoding: .utf8) else {
-            return []
-        }
-        
-        // Custom extract function
-        var links: [M3U8Link] = []
-        for index in 0 ... 5 {
-            let m3u8URL = "video-\(index).m3u8"
-            let videoName = "name-\(index)"
-            
-            links.append(M3U8Link(
-                url: m3u8URL,
-                name: videoName
-            ))
-        }
-        
-        return links
-    }
-    
-    // Return supported domains
-    public func getSupportedDomains() -> [String] {
-        return supportedDomains
-    }
-    
-    // Return extractor information
-    public func getExtractorInfo() -> ExtractorInfo {
-        return ExtractorInfo(
-            name: "Custom Video Site Extractor",
-            version: "1.0.0",
-            supportedDomains: getSupportedDomains(),
-            capabilities: [.directLinks, .javascriptVariables]
-        )
-    }
-    
-    // Check if this URL can be handled
-    public func canHandle(url: URL) -> Bool {
-        guard let host = url.host else { return false }
-        return supportedDomains.contains { host.hasSuffix($0) }
-    }
-}
-
-// 2️⃣ Register and use the extractor
-async func main() async throws {
-    // Create extractor registry
-    let registry = DefaultM3U8ExtractorRegistry()
-    
-    // Register your custom extractor
-    let customExtractor = CustomVideoSiteExtractor()
-    registry.registerExtractor(customExtractor)
-    
-    // Use the extractor to extract M3U8 links
-    let url = URL(string: "https://example.com/video-page")!
-    let links = try await registry.extractM3U8Links(
-        from: url,
-        options: LinkExtractionOptions.default
-    )
-    
-    // Process extracted links
-    print("Found \(links.count) M3U8 links:")
-    for link in links {
-        print("  📹 \(link.name)")
-        print("     URL: \(link.url)")
-    }
-    
-    // 3️⃣ Download the first extracted video
-    if let firstLink = links.first {
-        await M3U8Falcon.initialize()
-        try await M3U8Falcon.download(
-            .web,
-            url: firstLink.url,
-            savedDirectory: URL(fileURLWithPath: "~/Downloads/"),
-            name: firstLink.name,
-            verbose: true
-        )
-        print("✅ Video downloaded successfully!")
-    }
-}
-
-// Run the example
-try await main()
-```
-
-### Key Components
-
-#### M3U8Link Structure
-
-```swift
-public struct M3U8Link: Sendable {
-    let url: URL              // M3U8 playlist URL (required)
-    let name: String          // Video name (required)
-    let quality: Quality      // Video quality - optional metadata
-    // Additional optional fields: bandwidth, resolution, source, etc.
-}
-```
-
-#### LinkExtractionOptions
-
-```swift
-public struct LinkExtractionOptions: Sendable {
-    let timeout: TimeInterval        // Request timeout
-    let maxRetries: Int              // Maximum retry attempts
-    let methods: [ExtractionMethod]  // Extraction methods
-    let headers: [String: String]    // HTTP headers
-    
-    public static let `default`: LinkExtractionOptions
-}
-```
-
-#### ExtractorInfo
-
-```swift
-public struct ExtractorInfo: Sendable {
-    let name: String                    // Extractor name
-    let version: String                 // Version number
-    let supportedDomains: [String]      // Supported domain list
-    let capabilities: [Capability]      // Capability list
-}
-```
-
-### CLI Integration
-
-Your custom extractor can also be used via CLI:
-
-```bash
-# Extract M3U8 links
-m3u8-falcon extract "https://example.com/video-page"
-
-# View registered extractors
-m3u8-falcon extract "https://example.com/video-page" --show-extractors
-
-# Specify extraction method
-m3u8-falcon extract "https://example.com/video-page" --methods direct-links
-```
 
 ---
 
@@ -333,23 +155,38 @@ import M3U8Falcon
 // Initialize the utility
 await M3U8Falcon.initialize()
 
-// Download an M3U8 file with verbose output
+// Download an M3U8 file (savedDirectory is optional, defaults to Downloads folder)
+try await M3U8Falcon.download(
+    .web,
+    url: URL(string: "https://example.com/video.m3u8")!,
+    name: "my-video"
+)
+
+// Download with custom directory
 try await M3U8Falcon.download(
     .web,
     url: URL(string: "https://example.com/video.m3u8")!,
     savedDirectory: URL(fileURLWithPath: "/Users/username/Downloads/videos/"),
-    name: "my-video",
-    verbose: true
+    name: "my-video"
 )
 
-// Download encrypted M3U8 with custom decryption key and IV
+// Download encrypted M3U8 with custom AES-128 decryption
 try await M3U8Falcon.download(
     .web,
     url: URL(string: "https://example.com/encrypted-video.m3u8")!,
-    savedDirectory: URL(fileURLWithPath: "/Users/username/Downloads/videos/"),
     name: "encrypted-video",
-    customKey: "0123456789abcdef0123456789abcdef",
-    customIV: "0123456789abcdef0123456789abcdef"
+    strategy: .customAES128(
+        key: "0123456789abcdef0123456789abcdef",
+        iv: "0123456789abcdef0123456789abcdef"
+    )
+)
+
+// Download encrypted M3U8 with key only (IV derived from segment sequence)
+try await M3U8Falcon.download(
+    .web,
+    url: URL(string: "https://example.com/encrypted-video.m3u8")!,
+    name: "encrypted-video",
+    strategy: .customAES128(key: "0123456789abcdef0123456789abcdef")
 )
 ```
 
@@ -371,6 +208,35 @@ case .cancelled:
 }
 ```
 
+### Extract M3U8 Links from Web Pages
+
+```swift
+import M3U8Falcon
+
+// Initialize the library first
+await M3U8Falcon.initialize()
+
+// Create extractor registry (uses configuration from DI container)
+let registry = await DefaultM3U8ExtractorRegistry.create()
+
+// Or create with default configuration (one line)
+// let registry = DefaultM3U8ExtractorRegistry()
+
+// Register custom extractors (optional)
+// registry.registerExtractor(YouTubeExtractor())
+// registry.registerExtractor(VimeoExtractor())
+
+// Extract M3U8 links from a web page
+let links = try await registry.extractM3U8Links(
+    from: URL(string: "https://example.com/video-page")!,
+    options: LinkExtractionOptions.default
+)
+
+for link in links {
+    print("Found M3U8 link: \(link.url) (confidence: \(link.confidence))")
+}
+```
+
 ### CLI Commands
 
 ```bash
@@ -379,6 +245,9 @@ m3u8-falcon download https://example.com/video.m3u8
 
 # Download with custom filename
 m3u8-falcon download https://example.com/video.m3u8 --name my-video
+
+# Download to custom directory
+m3u8-falcon download https://example.com/video.m3u8 --output /path/to/videos
 
 # Download encrypted M3U8 with custom decryption key
 m3u8-falcon download https://example.com/video.m3u8 --key 0123456789abcdef0123456789abcdef
@@ -403,12 +272,12 @@ Note: CLI URLs must use http or https schemes.
 ### Custom Configuration
 
 ```swift
+// Configure with verbose logging
 let customConfig = DIConfiguration(
     ffmpegPath: "/custom/path/ffmpeg",
     maxConcurrentDownloads: 10,
     downloadTimeout: 60,
-    key: "0123456789abcdef0123456789abcdef",  // Optional: default decryption key
-    iv: "0123456789abcdef0123456789abcdef"     // Optional: default IV
+    logLevel: .verbose  // Enable verbose logging
 )
 
 await M3U8Falcon.initialize(with: customConfig)
@@ -435,23 +304,33 @@ Logger.configure(customConfig)
 
 ### Encrypted M3U8 Support
 
-For encrypted M3U8 streams, you can provide custom AES-128 decryption keys:
+For encrypted M3U8 streams, you can provide custom AES-128 decryption using the `DecryptionStrategy` enum:
 
 ```swift
-// Method 1: Via configuration (applies to all downloads)
-let config = DIConfiguration(
-    key: "0123456789abcdef0123456789abcdef",
-    iv: "0123456789abcdef0123456789abcdef"
+// No decryption (default)
+try await M3U8Falcon.download(
+    .web,
+    url: videoURL,
+    name: "video"
 )
-await M3U8Falcon.initialize(with: config)
 
-// Method 2: Per-download override (takes precedence over configuration)
+// Custom AES-128 decryption with key and IV
 try await M3U8Falcon.download(
     .web,
     url: encryptedVideoURL,
-    savedDirectory: outputDir,
-    key: "0123456789abcdef0123456789abcdef",
-    iv: "0123456789abcdef0123456789abcdef"
+    name: "encrypted-video",
+    strategy: .customAES128(
+        key: "0123456789abcdef0123456789abcdef",
+        iv: "0123456789abcdef0123456789abcdef"
+    )
+)
+
+// Custom AES-128 decryption with key only (IV derived from segment sequence)
+try await M3U8Falcon.download(
+    .web,
+    url: encryptedVideoURL,
+    name: "encrypted-video",
+    strategy: .customAES128(key: "0123456789abcdef0123456789abcdef")
 )
 ```
 
@@ -459,16 +338,20 @@ try await M3U8Falcon.download(
 
 - Example: `"0123456789abcdef0123456789abcdef"`
 - Whitespace and `0x` prefix are automatically stripped
+- IV is optional - if not provided, it will be derived from the segment sequence number
 
 ### Error Handling
 
 ```swift
 do {
-    try await M3U8Falcon.download(.web, url: videoURL, verbose: true)
+    try await M3U8Falcon.download(.web, url: videoURL, name: "my-video")
 } catch let error as FileSystemError {
     print("File system error: \(error.message)")
 } catch let error as NetworkError {
     print("Network error: \(error.message)")
+} catch let error as ConfigurationError {
+    print("Configuration error: \(error.message)")
+    // Make sure to call M3U8Falcon.initialize() first
 } catch {
     print("Unexpected error: \(error)")
 }

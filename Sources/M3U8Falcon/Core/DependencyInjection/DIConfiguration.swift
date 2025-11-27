@@ -53,14 +53,6 @@ public struct DIConfiguration: Sendable {
     /// Minimum log level for the logger
     public let logLevel: LogLevel
     
-    /// Custom AES-128 decryption key (hex string or base64, optional)
-    /// When provided, overrides the key URL in the M3U8 playlist
-    public let key: String?
-    
-    /// Custom AES-128 initialization vector (hex string, optional)
-    /// When provided, overrides the IV in the M3U8 playlist
-    public let iv: String?
-    
     /// Initializes a new configuration instance
     /// 
     /// - Parameters:
@@ -72,8 +64,8 @@ public struct DIConfiguration: Sendable {
     ///   - retryAttempts: Max automatic retry attempts for transient failures (default: 0)
     ///   - retryBackoffBase: Base seconds for exponential backoff (default: 0.5)
     ///   - logLevel: Minimum log level for logger (default: .info)
-    ///   - key: Custom AES-128 decryption key (optional)
-    ///   - iv: Custom AES-128 initialization vector (optional)
+    /// 
+    /// Note: For decryption, use `DecryptionStrategy` parameter in `M3U8Falcon.download()` method instead of configuration-level keys.
     public init(
         ffmpegPath: String? = nil,
         defaultHeaders: [String: String] = ["User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"],
@@ -82,9 +74,7 @@ public struct DIConfiguration: Sendable {
         resourceTimeout: TimeInterval? = nil,
         retryAttempts: Int = 0,
         retryBackoffBase: TimeInterval = 0.5,
-        logLevel: LogLevel = .info,
-        key: String? = nil,
-        iv: String? = nil
+        logLevel: LogLevel = .info
     ) {
         self.ffmpegPath = ffmpegPath
         self.defaultHeaders = defaultHeaders
@@ -94,8 +84,6 @@ public struct DIConfiguration: Sendable {
         self.retryAttempts = max(0, retryAttempts)
         self.retryBackoffBase = max(0, retryBackoffBase)
         self.logLevel = logLevel
-        self.key = key
-        self.iv = iv
     }
 }
 
@@ -130,7 +118,7 @@ extension DIConfiguration {
     /// 
     /// // Configure the dependency container
     /// let container = DependencyContainer()
-    /// container.configurePerformanceOptimized(with: config)
+    /// container.configure(with: config)
     /// ```
     public static func performanceOptimized() -> DIConfiguration {
         return DIConfiguration(

@@ -20,20 +20,23 @@ public struct DefaultM3U8Downloader: M3U8DownloaderProtocol {
     private let commandExecutor: CommandExecutorProtocol
     private let configuration: DIConfiguration
     private let networkClient: NetworkClientProtocol
+    private let fileSystem: FileSystemServiceProtocol
     
     /// Initializes a new downloader
     /// - Parameters:
     ///   - commandExecutor: Executor for shell tools (e.g., ffmpeg) if needed
     ///   - configuration: DI configuration providing headers, timeouts, etc.
     ///   - networkClient: Optional custom network client. Defaults to `DefaultNetworkClient`.
-    public init(commandExecutor: CommandExecutorProtocol, configuration: DIConfiguration, networkClient: NetworkClientProtocol? = nil) {
+    ///   - fileSystem: File system service for file operations
+    public init(commandExecutor: CommandExecutorProtocol, configuration: DIConfiguration, networkClient: NetworkClientProtocol? = nil, fileSystem: FileSystemServiceProtocol) {
         self.commandExecutor = commandExecutor
         self.configuration = configuration
         if let client = networkClient {
             self.networkClient = client
         } else {
-            self.networkClient = DefaultNetworkClient(configuration: configuration)
+            self.networkClient = DefaultNetworkClient(configuration: configuration, fileSystem: fileSystem)
         }
+        self.fileSystem = fileSystem
     }
     
     /// Downloads textual M3U8 content from the given URL
@@ -127,17 +130,19 @@ public struct DefaultM3U8Downloader: M3U8DownloaderProtocol {
         
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
-            try? FileManager.default.removeItem(at: location)
+            try? fileSystem.removeItem(at: location)
             throw NetworkError.serverError(url, statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
         }
         
         let filename = url.lastPathComponent
         let fileURL = directory.appendingPathComponent(filename)
         
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            try FileManager.default.removeItem(at: fileURL)
+        if fileSystem.fileExists(at: fileURL) {
+            try fileSystem.removeItem(at: fileURL)
         }
-        try FileManager.default.moveItem(at: location, to: fileURL)
+        // Move the downloaded file from temporary location to destination
+        try fileSystem.copyItem(at: location, to: fileURL)
+        try? fileSystem.removeItem(at: location) // Clean up temp file
     }
 }
 

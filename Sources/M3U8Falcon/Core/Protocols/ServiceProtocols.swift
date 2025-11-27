@@ -170,9 +170,10 @@ public protocol VideoProcessorProtocol: Sendable {
 
     /// Decrypts and combines video segments into a single output file
     /// 
-    /// This method decrypts an encrypted video segment and saves it to the specified
-    /// output location. It supports various encryption methods and automatically
-    /// detects hardware acceleration capabilities.
+    /// This method decrypts multiple encrypted video segments and combines them
+    /// into a single output file. It reads the local M3U8 file to determine
+    /// which segments need decryption and their order. It supports various
+    /// encryption methods and automatically detects hardware acceleration capabilities.
     /// 
     /// - Parameters:
     ///   - directory: The directory containing the video segments
@@ -204,15 +205,15 @@ public protocol VideoProcessorProtocol: Sendable {
 /// ## Usage Example
 /// ```swift
 /// class MyFileSystem: FileSystemServiceProtocol {
-///     func createDirectory(at path: String, withIntermediateDirectories: Bool) throws {
+///     func createDirectory(at url: URL, withIntermediateDirectories: Bool) throws {
 ///         try FileManager.default.createDirectory(
-///             atPath: path,
+///             at: url,
 ///             withIntermediateDirectories: withIntermediateDirectories
 ///         )
 ///     }
 ///     
-///     func fileExists(at path: String) -> Bool {
-///         return FileManager.default.fileExists(atPath: path)
+///     func fileExists(at url: URL) -> Bool {
+///         return FileManager.default.fileExists(atPath: url.path)
 ///     }
 ///     
 ///     // ... other method implementations
@@ -289,12 +290,14 @@ public protocol FileSystemServiceProtocol: Sendable {
 /// let request = TaskRequest(
 ///     url: URL(string: "https://example.com/video.m3u8")!,
 ///     baseUrl: nil,
-///     savedDirectory: "/Users/username/Downloads/",
+///     savedDirectory: URL(fileURLWithPath: "/Users/username/Downloads/"),
 ///     fileName: "my-video",
 ///     method: .web,
 ///     verbose: true,
-///     key: "0123456789abcdef0123456789abcdef",
-///     iv: "0123456789abcdef0123456789abcdef"
+///     decryptionStrategy: .customAES128(
+///         key: "0123456789abcdef0123456789abcdef",
+///         iv: "0123456789abcdef0123456789abcdef"
+///     )
 /// )
 /// 
 /// try await taskManager.createTask(request)
@@ -318,13 +321,8 @@ public struct TaskRequest: Sendable {
     /// Whether to output detailed information during the download process
     public let verbose: Bool
     
-    /// Custom AES-128 decryption key (hex string, optional)
-    /// When provided, overrides the key URL in the M3U8 playlist
-    public let key: String?
-    
-    /// Custom AES-128 initialization vector (hex string, optional)
-    /// When provided, overrides the IV in the M3U8 playlist
-    public let iv: String?
+    /// Decryption strategy for encrypted segments
+    public let decryptionStrategy: DecryptionStrategy
     
     /// Initializes a new task request
     /// 
@@ -335,8 +333,7 @@ public struct TaskRequest: Sendable {
     ///   - fileName: Optional custom filename for the output video
     ///   - method: The download method (web or local)
     ///   - verbose: Whether to output detailed information during the download process
-    ///   - key: Custom AES-128 decryption key (optional)
-    ///   - iv: Custom AES-128 initialization vector (optional)
+    ///   - decryptionStrategy: Decryption strategy for encrypted segments
     public init(
         url: URL,
         baseUrl: URL? = nil,
@@ -344,8 +341,7 @@ public struct TaskRequest: Sendable {
         fileName: String? = nil,
         method: Method,
         verbose: Bool = false,
-        key: String? = nil,
-        iv: String? = nil
+        decryptionStrategy: DecryptionStrategy = .normal
     ) {
         self.url = url
         self.baseUrl = baseUrl
@@ -353,8 +349,7 @@ public struct TaskRequest: Sendable {
         self.fileName = fileName
         self.method = method
         self.verbose = verbose
-        self.key = key
-        self.iv = iv
+        self.decryptionStrategy = decryptionStrategy
     }
 }
 
@@ -555,7 +550,18 @@ public protocol M3U8ExtractorRegistryProtocol: Sendable {
     /// - Parameter extractor: The extractor to register
     func registerExtractor(_ extractor: M3U8LinkExtractorProtocol)
 
-    /// Registers a new link extractor with priority (higher wins). Optional extension API.
+    /// Registers a new link extractor with priority
+    /// 
+    /// This method registers a link extractor with a priority value. When multiple
+    /// extractors can handle the same URL, the one with the higher priority will be used.
+    /// This is useful for overriding default extractors or providing specialized handlers.
+    /// 
+    /// - Parameters:
+    ///   - extractor: The extractor to register
+    ///   - priority: Priority value (higher values take precedence)
+    /// 
+    /// - Note: This is an optional extension API. Implementations may choose to
+    ///   ignore priority if not supported.
     func registerExtractor(_ extractor: M3U8LinkExtractorProtocol, priority: Int)
     
     /// Extracts M3U8 links using the appropriate registered extractor
@@ -663,35 +669,151 @@ public protocol JavaScriptExecutorProtocol: Sendable {
 }
 
 /// Protocol for basic HTTP networking
+/// 
+/// This protocol defines the interface for performing HTTP/HTTPS network requests.
+/// Implementations should handle request/response lifecycle, error handling, and
+/// provide both in-memory and file-based download capabilities.
+/// 
+/// ## Usage Example
+/// ```swift
+/// class MyNetworkClient: NetworkClientProtocol {
+///     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+///         // Implementation for in-memory data requests
+///     }
+///     
+///     func download(for request: URLRequest) async throws -> (URL, URLResponse) {
+///         // Implementation for file-based downloads
+///     }
+/// }
+/// ```
 public protocol NetworkClientProtocol: Sendable {
-    /// Perform a request and return data and response
+    /// Performs a network request and returns the data and response
+    /// 
+    /// This method performs an HTTP/HTTPS request and returns both the response
+    /// data and the URL response object. The data is loaded into memory.
+    /// 
+    /// - Parameter request: The URL request to perform
+    /// 
+    /// - Returns: A tuple containing the response data and URL response
+    /// 
+    /// - Throws: `NetworkError` if the request fails
     func data(for request: URLRequest) async throws -> (Data, URLResponse)
     
-    /// Download content to a temporary file
-    /// - Returns: (Temporary file URL, URLResponse)
+    /// Downloads content to a temporary file
+    /// 
+    /// This method performs a network request and downloads the content to a
+    /// temporary file, returning the file URL and response. This is useful for
+    /// large files that shouldn't be loaded into memory.
+    /// 
+    /// - Parameter request: The URL request to perform
+    /// 
+    /// - Returns: A tuple containing the temporary file URL and URL response
+    /// 
+    /// - Throws: `NetworkError` if the download fails
     func download(for request: URLRequest) async throws -> (URL, URLResponse)
 }
 
-/// Protocol for logging
+/// Protocol for logging operations
+/// 
+/// This protocol defines the interface for logging messages at different severity
+/// levels. Implementations should handle log formatting, filtering, and output
+/// routing based on the log level and category.
+/// 
+/// ## Usage Example
+/// ```swift
+/// class MyLogger: LoggerProtocol {
+///     func error(_ message: String, category: LogCategory, file: String, function: String, line: Int) {
+///         // Implementation for error logging
+///     }
+///     // ... other log level methods
+/// }
+/// ```
 public protocol LoggerProtocol: Sendable {
-    /// Log a message at the error level with explicit source location
+    /// Logs a message at the error level with explicit source location
+    /// 
+    /// - Parameters:
+    ///   - message: The log message
+    ///   - category: The log category for filtering
+    ///   - file: Source file name (typically `#file`)
+    ///   - function: Function name (typically `#function`)
+    ///   - line: Line number (typically `#line`)
     func error(_ message: String, category: LogCategory, file: String, function: String, line: Int)
-    /// Log a message at the info level with explicit source location
+    
+    /// Logs a message at the info level with explicit source location
+    /// 
+    /// - Parameters:
+    ///   - message: The log message
+    ///   - category: The log category for filtering
+    ///   - file: Source file name (typically `#file`)
+    ///   - function: Function name (typically `#function`)
+    ///   - line: Line number (typically `#line`)
     func info(_ message: String, category: LogCategory, file: String, function: String, line: Int)
-    /// Log a message at the debug level with explicit source location
+    
+    /// Logs a message at the debug level with explicit source location
+    /// 
+    /// - Parameters:
+    ///   - message: The log message
+    ///   - category: The log category for filtering
+    ///   - file: Source file name (typically `#file`)
+    ///   - function: Function name (typically `#function`)
+    ///   - line: Line number (typically `#line`)
     func debug(_ message: String, category: LogCategory, file: String, function: String, line: Int)
-    /// Log a message at the verbose level with explicit source location
+    
+    /// Logs a message at the verbose level with explicit source location
+    /// 
+    /// - Parameters:
+    ///   - message: The log message
+    ///   - category: The log category for filtering
+    ///   - file: Source file name (typically `#file`)
+    ///   - function: Function name (typically `#function`)
+    ///   - line: Line number (typically `#line`)
     func verbose(_ message: String, category: LogCategory, file: String, function: String, line: Int)
-    /// Log a message at the warning level with explicit source location
+    
+    /// Logs a message at the warning level with explicit source location
+    /// 
+    /// - Parameters:
+    ///   - message: The log message
+    ///   - category: The log category for filtering
+    ///   - file: Source file name (typically `#file`)
+    ///   - function: Function name (typically `#function`)
+    ///   - line: Line number (typically `#line`)
     func warning(_ message: String, category: LogCategory, file: String, function: String, line: Int)
 }
 
 /// Protocol for providing well-known filesystem paths
 ///
-/// Provides platform-aware standard directories used by the application.
+/// This protocol defines the interface for accessing platform-aware standard
+/// directories used by the application. Implementations should handle platform-specific
+/// path resolution, including XDG Base Directory on Linux and standard directories
+/// on macOS/Windows.
+///
+/// ## Usage Example
+/// ```swift
+/// class MyPathProvider: PathProviderProtocol {
+///     func downloadsDirectory() -> URL {
+///         // Platform-specific implementation
+///     }
+///     
+///     func temporaryDirectory() -> URL {
+///         return FileManager.default.temporaryDirectory
+///     }
+/// }
+/// ```
 public protocol PathProviderProtocol: Sendable {
     /// Returns the user's Downloads directory path
+    /// 
+    /// This method returns the platform-appropriate Downloads directory.
+    /// On macOS, this is typically `~/Downloads`. On Linux, it checks XDG
+    /// environment variables and configuration files.
+    /// 
+    /// - Returns: The URL of the Downloads directory
     func downloadsDirectory() -> URL
+    
     /// Returns a temporary directory URL for ephemeral files
+    /// 
+    /// This method returns the system's temporary directory, which is suitable
+    /// for storing files that are only needed temporarily.
+    /// 
+    /// - Returns: The URL of the temporary directory
     func temporaryDirectory() -> URL
 }

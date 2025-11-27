@@ -5,7 +5,6 @@
 //  Created by tree_fly on 2025/11/14.
 //
 
-
 import Foundation
 
 #if canImport(FoundationNetworking)
@@ -211,7 +210,7 @@ public protocol StreamingNetworkClientProtocol: Sendable {
 ///     // Use Linux-specific implementations
 /// }
 /// ```
-enum PlatformUtils {
+public enum PlatformUtils {
     /// Indicates if running on a Darwin-based operating system
     /// 
     /// Returns `true` for macOS, iOS, watchOS, tvOS, and visionOS.

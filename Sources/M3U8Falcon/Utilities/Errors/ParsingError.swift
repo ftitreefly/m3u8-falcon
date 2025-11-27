@@ -13,6 +13,7 @@ import Foundation
 /// 
 /// ## Error Codes
 /// - 2001: Malformed playlist / missing required data
+/// - 2002: Missing required tag
 /// - 2003: Invalid tag format
 /// - 2004: Invalid content encoding
 public struct ParsingError: M3U8FalconError {
