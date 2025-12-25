@@ -27,7 +27,7 @@ final class PerformanceOptimizedTests {
         
         let configuration = try testContainer.resolve(DIConfiguration.self)
         #expect(configuration.maxConcurrentDownloads == 20)
-        #expect(configuration.downloadTimeout == 60)
+        #expect(configuration.downloadTimeout == 30)
     }
     
     @Test("Configuration validation")
@@ -71,7 +71,7 @@ final class PerformanceOptimizedTests {
         
         // Core performance parameters
         #expect(config.maxConcurrentDownloads == 20, "Should have 20 concurrent downloads for performance")
-        #expect(config.downloadTimeout == 60, "Should have 60 second download timeout")
+        #expect(config.downloadTimeout == 30, "Should have 30 second download timeout")
         #expect(config.resourceTimeout == 120, "Should have 120 second resource timeout")
         
         // Retry configuration
@@ -99,7 +99,7 @@ final class PerformanceOptimizedTests {
         
         // Verify all numeric parameters
         #expect(config.maxConcurrentDownloads == 20)
-        #expect(config.downloadTimeout == 60.0)
+        #expect(config.downloadTimeout == 30.0)
         #expect(config.resourceTimeout == 120.0)
         #expect(config.retryAttempts == 2)
         #expect(config.retryBackoffBase == 0.4)
