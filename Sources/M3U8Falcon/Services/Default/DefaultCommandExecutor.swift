@@ -100,5 +100,46 @@ public struct DefaultCommandExecutor: CommandExecutorProtocol {
       )
     }
   }
+  
+  /// Executes a shell command with arguments and returns detailed execution result
+  /// 
+  /// This method executes an external command and returns both stdout and stderr
+  /// along with the exit code in a `CommandExecutionResult`.
+  /// 
+  /// - Parameters:
+  ///   - command: The command to execute (full path)
+  ///   - arguments: Array of command-line arguments
+  ///   - workingDirectory: Optional working directory for the command
+  /// 
+  /// - Returns: A `CommandExecutionResult` containing stdout, stderr, and exit code
+  /// 
+  /// - Throws: `ProcessingError` if the command fails to execute
+  public func executeWithResult(command: String, arguments: [String], workingDirectory: String?) async throws -> CommandExecutionResult {
+    do {
+      let result = try await processExecutor.execute(
+        executable: command,
+        arguments: arguments,
+        input: nil,
+        timeout: nil,
+        workingDirectory: workingDirectory
+      )
+      
+      return CommandExecutionResult(
+        stdout: result.outputString,
+        stderr: result.errorString,
+        exitCode: result.exitCode
+      )
+      
+    } catch let error as ProcessingError {
+      // Re-throw ProcessingError as-is
+      throw error
+    } catch {
+      // Wrap other errors
+      throw ProcessingError.platformError(
+        underlying: error,
+        context: "command execution"
+      )
+    }
+  }
 }
 

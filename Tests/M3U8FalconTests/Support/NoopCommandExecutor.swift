@@ -12,6 +12,10 @@ struct NoopCommandExecutor: CommandExecutorProtocol {
     func execute(command: String, arguments: [String], workingDirectory: String?) async throws -> String {
         return ""
     }
+    
+    func executeWithResult(command: String, arguments: [String], workingDirectory: String?) async throws -> CommandExecutionResult {
+        return CommandExecutionResult(stdout: "", stderr: "", exitCode: 0)
+    }
 }
 
 

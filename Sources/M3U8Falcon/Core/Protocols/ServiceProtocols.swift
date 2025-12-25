@@ -428,6 +428,24 @@ public protocol TaskManagerProtocol: Sendable {
 ///     }
 /// }
 /// ```
+/// Result of command execution containing both stdout and stderr
+public struct CommandExecutionResult: Sendable {
+    /// Standard output (stdout) as a string
+    public let stdout: String
+    /// Standard error (stderr) as a string
+    public let stderr: String
+    /// Exit code of the command
+    public let exitCode: Int32
+    /// Whether the command succeeded (exit code 0)
+    public var isSuccess: Bool { exitCode == 0 }
+    
+    public init(stdout: String, stderr: String, exitCode: Int32) {
+        self.stdout = stdout
+        self.stderr = stderr
+        self.exitCode = exitCode
+    }
+}
+
 public protocol CommandExecutorProtocol: Sendable {
     /// Executes a shell command with arguments
     /// 
@@ -442,6 +460,21 @@ public protocol CommandExecutorProtocol: Sendable {
     /// 
     /// - Throws: `CommandExecutionError` if the command fails to execute
     func execute(command: String, arguments: [String], workingDirectory: String?) async throws -> String
+    
+    /// Executes a shell command with arguments and returns detailed execution result
+    /// 
+    /// This method executes an external command and returns both stdout and stderr
+    /// along with the exit code in a `CommandExecutionResult`.
+    /// 
+    /// - Parameters:
+    ///   - command: The command to execute (full path)
+    ///   - arguments: Array of command-line arguments
+    ///   - workingDirectory: Optional working directory for the command
+    /// 
+    /// - Returns: A `CommandExecutionResult` containing stdout, stderr, and exit code
+    /// 
+    /// - Throws: `ProcessingError` if the command fails to execute
+    func executeWithResult(command: String, arguments: [String], workingDirectory: String?) async throws -> CommandExecutionResult
 }
 
 /// Protocol for extracting M3U8 links from web pages

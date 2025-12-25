@@ -146,15 +146,13 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
         }
         
         arguments.append(outputURL.path)
+
+        // Only set verbose mode when explicitly needed for debugging
+        if configuration.logLevel >= .verbose {
+            arguments.append(contentsOf: ["-v", "verbose"])
+        }
         
-        // Add performance settings
-#if DEBUG
-        arguments.append(contentsOf: ["-v", "verbose"])
-#else
-        arguments.append(contentsOf: ["-v", "quiet", "-nostats"])
-#endif
-        
-        _ = try await commandExecutor.execute(
+        try await executeFFmpegWithRetry(
             command: ffmpegCommand,
             arguments: arguments,
             workingDirectory: outputURL.deletingLastPathComponent().path
@@ -184,7 +182,7 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
         
         let arguments = await buildDecryptAndCombineSegmentsFFmpegArguments(m3u8File: m3u8File, outputFile: outputFile)
         
-        _ = try await commandExecutor.execute(
+        try await executeFFmpegWithRetry(
             command: ffmpegCommand,
             arguments: arguments,
             workingDirectory: directory.path
@@ -192,6 +190,86 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
     }
     
     // MARK: - Private Optimized Methods
+    
+    /// Executes an FFmpeg command with retry logic for timeout errors
+    /// 
+    /// Since FFmpeg may request network resources (e.g., when processing M3U8 playlists
+    /// with remote segments), this method implements retry logic with exponential backoff
+    /// to handle transient network timeouts.
+    /// 
+    /// - Parameters:
+    ///   - command: The FFmpeg command path
+    ///   - arguments: Command arguments
+    ///   - workingDirectory: Working directory for the command
+    ///   - maxRetries: Maximum number of retry attempts (default: 3)
+    /// 
+    /// - Throws: ProcessingError if all retries are exhausted
+    private func executeFFmpegWithRetry(
+        command: String,
+        arguments: [String],
+        workingDirectory: String?,
+        maxRetries: Int = 3
+    ) async throws {
+        let useVerboseLogging = configuration.logLevel >= .verbose
+        
+        for attempt in 0...maxRetries {
+            do {
+                // Always use executeWithResult to get both stdout and stderr
+                let result = try await commandExecutor.executeWithResult(
+                    command: command,
+                    arguments: arguments,
+                    workingDirectory: workingDirectory
+                )
+                
+                guard result.isSuccess else {
+                    // Log stderr output on failure (always useful for debugging)
+                    if !result.stderr.isEmpty && useVerboseLogging {
+                        Logger.verbose("FFmpeg error:\n\(result.stderr)", category: .processing)
+                    }
+                    throw ProcessingError.commandFailed(
+                        command: command,
+                        exitCode: result.exitCode,
+                        output: result.stdout,
+                        error: result.stderr
+                    )
+                }
+                
+                // Log FFmpeg verbose output from stderr when verbose mode is enabled
+                if !result.stderr.isEmpty && useVerboseLogging {
+                    Logger.verbose("FFmpeg output:\n\(result.stderr)", category: .processing)
+                }
+                
+                // Success - log if retried
+                if attempt > 0 {
+                    Logger.info(
+                        "FFmpeg command succeeded after \(attempt) retry attempt(s)",
+                        category: .processing
+                    )
+                }
+                return
+                
+            } catch {
+                if attempt < maxRetries {
+                    let delay = min(0.5 * pow(2.0, Double(attempt)), 5.0)
+                    Logger.debug(
+                        "FFmpeg command failed (attempt \(attempt + 1)/\(maxRetries + 1)): \(error.localizedDescription). Retrying in \(String(format: "%.1f", delay))s...",
+                        category: .processing
+                    )
+                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                } else {
+                    break
+                }
+            }
+        }
+        
+        // All retries exhausted
+        throw ProcessingError.commandFailed(
+            command: command,
+            exitCode: -1,
+            output: "",
+            error: "Unknown error after \(maxRetries + 1) attempts"
+        )
+    }
     
     /// Finds all video segment files in the specified directory
     /// 
@@ -283,11 +361,12 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
         
         arguments.append(outputFile.path)
         
-        // Add quiet mode for production
-#if !DEBUG
-        arguments.append(contentsOf: ["-v", "quiet", "-nostats"])
-#endif
-        
+        // Only set verbose mode when explicitly needed for debugging
+        // FFmpeg's default log level is "info" which is sufficient for normal operation
+        if configuration.logLevel >= .verbose {
+            arguments.append(contentsOf: ["-v", "verbose", "-stats"])
+        }   
+
         return arguments
     }
     
@@ -318,10 +397,11 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
             outputFile.path
         ])
         
-        // Add quiet mode for production
-#if !DEBUG
-        arguments.append(contentsOf: ["-v", "quiet", "-nostats"])
-#endif
+        // Only set verbose mode when explicitly needed for debugging
+        // FFmpeg's default log level is "info" which is sufficient for normal operation
+        if configuration.logLevel >= .verbose {
+            arguments.append(contentsOf: ["-v", "verbose", "-stats"])
+        }
         
         return arguments
     }
