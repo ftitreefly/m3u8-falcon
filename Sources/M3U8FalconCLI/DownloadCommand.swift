@@ -89,7 +89,7 @@ struct DownloadCommand: AsyncParsableCommand {
     /// 
     /// When enabled, provides detailed information about the download process,
     /// including progress updates, file sizes, and timing information.
-    @Flag(name: [.short], help: "Show verbose output")
+    @Flag(name: [.short, .long], help: "Show verbose output")
     var verbose: Bool = false
     
     /// Custom AES-128 decryption key (hex string)
@@ -123,7 +123,7 @@ struct DownloadCommand: AsyncParsableCommand {
     ///   - `ExitCode.failure` if URL is invalid or download fails
     ///   - Various network and file system errors during download
     mutating func run() async throws {
-        await M3U8Falcon.initialize()
+        await M3U8Falcon.initialize(verbose: verbose)
         
         try await validateFFmpegAvailability()
             

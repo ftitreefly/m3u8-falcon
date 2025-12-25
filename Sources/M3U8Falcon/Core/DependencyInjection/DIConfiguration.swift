@@ -51,7 +51,7 @@ public struct DIConfiguration: Sendable {
     public let retryBackoffBase: TimeInterval
     
     /// Minimum log level for the logger
-    public let logLevel: LogLevel
+    public var logLevel: LogLevel
     
     /// Initializes a new configuration instance
     /// 
@@ -59,7 +59,7 @@ public struct DIConfiguration: Sendable {
     ///   - ffmpegPath: Path to FFmpeg executable (optional, auto-detected if not provided)
     ///   - defaultHeaders: Default HTTP headers (defaults to standard browser headers)
     ///   - maxConcurrentDownloads: Maximum concurrent downloads (default: 16)
-    ///   - downloadTimeout: Per-request timeout in seconds (default: 300)
+    ///   - downloadTimeout: Per-request timeout in seconds (default: 30)
     ///   - resourceTimeout: Overall resource timeout in seconds (default: equals downloadTimeout)
     ///   - retryAttempts: Max automatic retry attempts for transient failures (default: 0)
     ///   - retryBackoffBase: Base seconds for exponential backoff (default: 0.5)
@@ -70,7 +70,7 @@ public struct DIConfiguration: Sendable {
         ffmpegPath: String? = nil,
         defaultHeaders: [String: String] = ["User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"],
         maxConcurrentDownloads: Int = 16,
-        downloadTimeout: TimeInterval = 300,
+        downloadTimeout: TimeInterval = 30,
         resourceTimeout: TimeInterval? = nil,
         retryAttempts: Int = 0,
         retryBackoffBase: TimeInterval = 0.5,
@@ -131,7 +131,7 @@ extension DIConfiguration {
                 "Connection": "keep-alive"
             ],
             maxConcurrentDownloads: 20,
-            downloadTimeout: 60,
+            downloadTimeout: 30,
             resourceTimeout: 120,
             retryAttempts: 2,
             retryBackoffBase: 0.4,

@@ -56,8 +56,14 @@ public struct M3U8Falcon {
     /// )
     /// await M3U8Falcon.initialize(with: config)
     /// ```
-    @MainActor public static func initialize(with configuration: DIConfiguration = DIConfiguration.performanceOptimized()) async {
-        await GlobalDependencies.shared.configure(with: configuration)
+    @MainActor public static func initialize(with configuration: DIConfiguration = DIConfiguration.performanceOptimized(), verbose: Bool = false) async {
+        if verbose {
+            var config = configuration
+            config.logLevel = .verbose
+            await GlobalDependencies.shared.configure(with: config)
+        } else {
+            await GlobalDependencies.shared.configure(with: configuration)
+        }
         Logger.debug("Concurrent file downloads count: \(configuration.maxConcurrentDownloads), single file download timeout: \(configuration.downloadTimeout) seconds", category: .download)
     }
     
@@ -73,8 +79,8 @@ public struct M3U8Falcon {
     ///   - name: Optional name for the output file. If not provided, uses the original filename
     ///   - strategy: Optional decryption strategy for encrypted segments. If `nil`, defaults to `.normal` (no decryption).
     ///     Use `.customAES128(key:iv:)` for AES-128 encrypted streams with custom key/IV.
-    ///   - verbose: Whether to output detailed operation-specific information (progress, etc.). 
-    ///     Note: Global logger verbosity is set in `initialize()`, this only affects operation-specific output.
+    ///   - verbose: Whether to output detailed operation-specific information (progress updates, etc.).
+    ///     Note: This controls operation-specific output only. For Logger verbosity, use `DIConfiguration.logLevel` in `initialize()`.
     /// - Precondition: `initialize()` must be called before calling this method.
     /// - Precondition: When `method == .web`, network connectivity is required.
     /// - Precondition: When `method == .local`, `url` must point to a readable local `.m3u8` file.
