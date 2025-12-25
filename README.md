@@ -18,7 +18,7 @@ A high-performance Swift library and CLI tool for downloading, parsing, and proc
 - 🚀 **Swift 6+**: Modern concurrency patterns and dependency injection architecture
 - 📱 **Cross-Platform**: macOS 12.0+ and Linux support (library & CLI)
 - 🔄 **High Performance**: Concurrent downloads (up to 20 tasks) with streaming support
-- 🎬 **Video Processing**: FFmpeg integration for segment combination and format conversion
+- 🎬 **Video Processing**: FFmpeg integration with automatic retry logic for network operations
 - 🔐 **Encryption**: Built-in AES-128 decryption with custom key/IV support
 - 🔌 **Extensible**: Protocol-based design for custom extractors and integrations
 - 🛡️ **Production Ready**: Comprehensive error handling, logging, and test coverage
@@ -276,8 +276,8 @@ Note: CLI URLs must use http or https schemes.
 let customConfig = DIConfiguration(
     ffmpegPath: "/custom/path/ffmpeg",
     maxConcurrentDownloads: 10,
-    downloadTimeout: 60,
-    logLevel: .verbose  // Enable verbose logging
+    downloadTimeout: 30,
+    logLevel: .verbose 
 )
 
 await M3U8Falcon.initialize(with: customConfig)
