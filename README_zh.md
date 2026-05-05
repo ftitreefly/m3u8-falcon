@@ -57,7 +57,7 @@ dependencies: [
 ```swift
 import M3U8Falcon
 
-// ⚠️ 重要：首先初始化库（必需）
+// 首先初始化库（必需）
 await M3U8Falcon.initialize()
 
 // 从M3U8 URL下载视频
@@ -79,9 +79,6 @@ m3u8-falcon download https://example.com/video.m3u8
 
 # 使用自定义文件名和详细输出下载
 m3u8-falcon download https://example.com/video.m3u8 --name my-video -v
-
-# 从网页提取M3U8链接
-m3u8-falcon extract "https://example.com/video-page"
 ```
 
 就是这样！更多高级功能请参见下面的章节。
@@ -202,35 +199,6 @@ case .cancelled:
 }
 ```
 
-### 从网页提取M3U8链接
-
-```swift
-import M3U8Falcon
-
-// 首先初始化库
-await M3U8Falcon.initialize()
-
-// 创建提取器注册表（使用DI容器中的配置）
-let registry = await DefaultM3U8ExtractorRegistry.create()
-
-// 或使用默认配置创建（一行代码）
-// let registry = DefaultM3U8ExtractorRegistry()
-
-// 注册自定义提取器（可选）
-// registry.registerExtractor(YouTubeExtractor())
-// registry.registerExtractor(VimeoExtractor())
-
-// 从网页提取M3U8链接
-let links = try await registry.extractM3U8Links(
-    from: URL(string: "https://example.com/video-page")!,
-    options: LinkExtractionOptions.default
-)
-
-for link in links {
-    print("找到M3U8链接: \(link.url) (置信度: \(link.confidence))")
-}
-```
-
 ### CLI命令
 
 ```bash
@@ -285,29 +253,11 @@ Logger.configure(.production())
 
 // 开发环境配置 - 详细输出
 Logger.configure(.development())
-
-// 自定义配置
-let customConfig = LoggerConfiguration(
-    minimumLevel: .debug,
-    includeTimestamps: true,
-    includeCategories: true,
-    enableColors: true
-)
-Logger.configure(customConfig)
 ```
 
-### 加密M3U8支持
-
-对于加密的M3U8流，你可以使用 `DecryptionStrategy` 枚举提供自定义的AES-128解密：
+### 自定义密钥M3U8支持
 
 ```swift
-// 无解密（默认）
-try await M3U8Falcon.download(
-    .web,
-    url: videoURL,
-    name: "video"
-)
-
 // 使用密钥和IV的自定义AES-128解密
 try await M3U8Falcon.download(
     .web,
@@ -328,32 +278,11 @@ try await M3U8Falcon.download(
 )
 ```
 
-**密钥格式**：十六进制字符串（128位AES为32个字符）
-
-- 示例：`"0123456789abcdef0123456789abcdef"`
-- 空格和`0x`前缀会自动移除
-- IV 是可选的 - 如果未提供，将从片段序列号派生
-
-### 错误处理
-
-```swift
-do {
-    try await M3U8Falcon.download(.web, url: videoURL, name: "my-video")
-} catch let error as FileSystemError {
-    print("文件系统错误：\(error.message)")
-} catch let error as NetworkError {
-    print("网络错误：\(error.message)")
-} catch let error as ConfigurationError {
-    print("配置错误：\(error.message)")
-    // 确保首先调用 M3U8Falcon.initialize()
-} catch {
-    print("意外错误：\(error)")
-}
-```
+**密钥格式**：十六进制字符串（128位AES为32个字符）, 空格和`0x`前缀会自动移除
 
 ---
 
-## 🧪 测试和开发
+## 🧪 测试
 
 M3U8Falcon 使用 Swift Testing 框架进行全面的测试覆盖。
 
@@ -362,33 +291,6 @@ M3U8Falcon 使用 Swift Testing 框架进行全面的测试覆盖。
 ```bash
 # 运行所有测试
 swift test
-
-# 运行详细输出的测试
-swift test --verbose
-
-# 运行特定测试套件
-swift test --filter ParseTests
-```
-
-### 开发环境设置
-
-```bash
-# 克隆仓库
-git clone https://github.com/ftitreefly/m3u8-falcon.git
-cd m3u8-falcon
-
-# 构建项目
-swift build
-
-# 运行测试
-swift test
-
-# 构建和运行CLI
-swift run m3u8-falcon --help
-
-# 使用详细输出测试下载
-swift run m3u8-falcon download https://example.com/video.m3u8 -v
-```
 
 ---
 

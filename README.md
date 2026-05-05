@@ -106,17 +106,6 @@ M3U8Falcon fully supports Linux with platform-specific optimizations:
 - ✅ **Path Resolution**: XDG Base Directory specification support for user directories
 - ✅ **FFmpeg Integration**: Automatic FFmpeg path detection across common Linux installations
 
-### Platform Differences
-
-The library automatically handles platform differences:
-
-| Feature | macOS/iOS | Linux |
-|---------|-----------|-------|
-| Process Output Capture | `readabilityHandler` | Polling with `DispatchGroup` |
-| Streaming Downloads | `URLSession.bytes` | `URLSessionDataDelegate` |
-| Terminal Detection | `Darwin.isatty` | `Glibc.isatty` |
-| URL Cache | `directory` parameter | `diskPath` parameter |
-| Downloads Directory | `~/Downloads` | XDG_DOWNLOAD_DIR / `~/.config/user-dirs.dirs` |
 
 ### Building on Linux
 
@@ -190,53 +179,6 @@ try await M3U8Falcon.download(
 )
 ```
 
-### Parse M3U8 Files
-
-```swift
-// Parse an M3U8 file
-let result = try await M3U8Falcon.parse(
-    url: URL(string: "https://example.com/video.m3u8")!
-)
-
-switch result {
-case .master(let masterPlaylist):
-    print("Master playlist with \(masterPlaylist.tags.streamTags.count) streams")
-case .media(let mediaPlaylist):
-    print("Media playlist with \(mediaPlaylist.tags.mediaSegments.count) segments")
-case .cancelled:
-    print("Parsing was cancelled")
-}
-```
-
-### Extract M3U8 Links from Web Pages
-
-```swift
-import M3U8Falcon
-
-// Initialize the library first
-await M3U8Falcon.initialize()
-
-// Create extractor registry (uses configuration from DI container)
-let registry = await DefaultM3U8ExtractorRegistry.create()
-
-// Or create with default configuration (one line)
-// let registry = DefaultM3U8ExtractorRegistry()
-
-// Register custom extractors (optional)
-// registry.registerExtractor(YouTubeExtractor())
-// registry.registerExtractor(VimeoExtractor())
-
-// Extract M3U8 links from a web page
-let links = try await registry.extractM3U8Links(
-    from: URL(string: "https://example.com/video-page")!,
-    options: LinkExtractionOptions.default
-)
-
-for link in links {
-    print("Found M3U8 link: \(link.url) (confidence: \(link.confidence))")
-}
-```
-
 ### CLI Commands
 
 ```bash
@@ -291,15 +233,6 @@ Logger.configure(.production())
 
 // Development configuration - detailed output
 Logger.configure(.development())
-
-// Custom configuration
-let customConfig = LoggerConfiguration(
-    minimumLevel: .debug,
-    includeTimestamps: true,
-    includeCategories: true,
-    enableColors: true
-)
-Logger.configure(customConfig)
 ```
 
 ### Encrypted M3U8 Support
@@ -336,30 +269,13 @@ try await M3U8Falcon.download(
 
 **Key Format**: Hexadecimal string (32 characters for 128-bit AES)
 
-- Example: `"0123456789abcdef0123456789abcdef"`
 - Whitespace and `0x` prefix are automatically stripped
 - IV is optional - if not provided, it will be derived from the segment sequence number
 
-### Error Handling
-
-```swift
-do {
-    try await M3U8Falcon.download(.web, url: videoURL, name: "my-video")
-} catch let error as FileSystemError {
-    print("File system error: \(error.message)")
-} catch let error as NetworkError {
-    print("Network error: \(error.message)")
-} catch let error as ConfigurationError {
-    print("Configuration error: \(error.message)")
-    // Make sure to call M3U8Falcon.initialize() first
-} catch {
-    print("Unexpected error: \(error)")
-}
-```
 
 ---
 
-## 🧪 Testing & Development
+## 🧪 Testing
 
 M3U8Falcon uses Swift Testing framework for comprehensive test coverage.
 
@@ -368,32 +284,6 @@ M3U8Falcon uses Swift Testing framework for comprehensive test coverage.
 ```bash
 # Run all tests
 swift test
-
-# Run with verbose output
-swift test --verbose
-
-# Run specific test suite
-swift test --filter ParseTests
-```
-
-### Development Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/ftitreefly/m3u8-falcon.git
-cd m3u8-falcon
-
-# Build the project
-swift build
-
-# Run tests
-swift test
-
-# Build and run CLI
-swift run m3u8-falcon --help
-
-# Test download with verbose output
-swift run m3u8-falcon download https://example.com/video.m3u8 -v
 ```
 
 ---
