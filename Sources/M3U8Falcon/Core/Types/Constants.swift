@@ -17,6 +17,9 @@ public enum Constants {
     public enum FileNames {
         /// Local M3U8 playlist file name
         public static let localM3U8 = "local_file.m3u8"
+
+        /// Reformatted local M3U8 playlist file name
+        public static let localM3U8Reformatted = "local_file_reformatted.m3u8"
         
         /// Decryption key file name
         public static let decryptionKey = "decryption_key.key"

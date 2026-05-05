@@ -471,54 +471,53 @@ public actor DefaultTaskManager: TaskManagerProtocol {
             return
         }
 
-            logger.debug("Custom key/iv are provided, will update local m3u8 file...", category: .processing)
+        logger.debug("Custom key/iv are provided, will update local m3u8 file...", category: .processing)
         let m3u8Content = try String(contentsOf: self.tempDir.appendingPathComponent(Constants.FileNames.localM3U8), encoding: .utf8)
 
-            if let keySegment = playlist.tags.keySegments.first {
-                var newKeyLine = "#EXT-X-KEY:"
-                if keySegment.method.uppercased() != "NONE" {
-                    newKeyLine += "METHOD=\(keySegment.method.uppercased())"
-                }
-
-            if key != nil {
-                    newKeyLine += ",URI=\"\(Constants.FileNames.decryptionKey)\""
-                } else {
-                    newKeyLine += ",URI=\"\(keySegment.uri)\""
-                }
-
-            if let iv = iv {
-                    newKeyLine += ",IV=0x\(iv)"
-                } else {
-                    newKeyLine += ",IV=0x\(keySegment.iv)"
-                }
-
-                let m3u8Path = tempDir.appendingPathComponent(Constants.FileNames.localM3U8)
-                var newContent = m3u8Content
-            let keyRegex = try NSRegularExpression(
-                pattern: #"^#EXT-X-KEY:.*$"#, options: [.anchorsMatchLines])
-                if keyRegex
-                .firstMatch(
-                    in: newContent, options: [],
-                    range: NSRange(location: 0, length: newContent.utf16.count)) != nil
-            {
-                    newContent = keyRegex.stringByReplacingMatches(
-                        in: newContent,
-                        options: [],
-                        range: NSRange(location: 0, length: newContent.utf16.count),
-                        withTemplate: newKeyLine
-                    )
-                } 
-                try newContent.write(to: m3u8Path, atomically: true, encoding: .utf8)
+        if let keySegment = playlist.tags.keySegments.first {
+            var newKeyLine = "#EXT-X-KEY:"
+            if keySegment.method.uppercased() != "NONE" {
+                newKeyLine += "METHOD=\(keySegment.method.uppercased())"
             }
 
-            // create key file
+            if key != nil {
+                newKeyLine += ",URI=\"\(Constants.FileNames.decryptionKey)\""
+            } else {
+                newKeyLine += ",URI=\"\(keySegment.uri)\""
+            }
+
+            if let iv = iv {
+                newKeyLine += ",IV=0x\(iv)"
+            } else {
+                newKeyLine += ",IV=0x\(keySegment.iv)"
+            }
+
+            let m3u8Path = tempDir.appendingPathComponent(Constants.FileNames.localM3U8)
+            var newContent = m3u8Content
+            let keyRegex = try NSRegularExpression(
+                pattern: #"^#EXT-X-KEY:.*$"#, options: [.anchorsMatchLines])
+            if keyRegex.firstMatch(
+                in: newContent, options: [],
+                range: NSRange(location: 0, length: newContent.utf16.count)) != nil
+            {
+                newContent = keyRegex.stringByReplacingMatches(
+                    in: newContent,
+                    options: [],
+                    range: NSRange(location: 0, length: newContent.utf16.count),
+                    withTemplate: newKeyLine
+                )
+            }
+            try newContent.write(to: m3u8Path, atomically: true, encoding: .utf8)
+        }
+
+        // create key file
         if let key = key {
-                let keyFileURL = tempDir.appendingPathComponent(Constants.FileNames.decryptionKey)
-                guard let keyData = Data(hexString: key) else {
-                    throw ProcessingError.invalidHexString(key)
-                }
-                try keyData.write(to: keyFileURL, options: .atomic)
-                logger.debug("Custom key file created at \(keyFileURL.path)", category: .fileSystem)
+            let keyFileURL = tempDir.appendingPathComponent(Constants.FileNames.decryptionKey)
+            guard let keyData = Data(hexString: key) else {
+                throw ProcessingError.invalidHexString(key)
+            }
+            try keyData.write(to: keyFileURL, options: .atomic)
+            logger.debug("Custom key file created at \(keyFileURL.path)", category: .fileSystem)
         }
     }
     
@@ -549,7 +548,7 @@ public actor DefaultTaskManager: TaskManagerProtocol {
         // Download segments with progress tracking
         try await downloadSegmentsWithProgress(
             segmentURLs, to: tempDir, taskInfo: &taskInfo, verbose: verbose)
-        
+
         // Calculate and display total bytes processed
         taskInfo.metrics.totalBytes = try await calculateTotalBytes(in: tempDir)
         logger.debug(

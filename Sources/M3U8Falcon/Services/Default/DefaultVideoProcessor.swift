@@ -105,7 +105,7 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
         
         // Use FFmpeg with optimized parameters
         let arguments = buildConcatSegmentsFFmpegArguments(concatFile: concatFile, outputFile: outputFile)
-        
+
         _ = try await commandExecutor.execute(
             command: ffmpegCommand,
             arguments: arguments,
@@ -179,14 +179,69 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
         }
         
         let m3u8File = directory.appendingPathComponent(localM3U8FileName)
-        
-        let arguments = await buildDecryptAndCombineSegmentsFFmpegArguments(m3u8File: m3u8File, outputFile: outputFile)
-        
-        try await executeFFmpegWithRetry(
-            command: ffmpegCommand,
-            arguments: arguments,
-            workingDirectory: directory.path
-        )
+        let formatM3U8File = try formatDecryptLocalM3U8File(url: m3u8File)
+
+        do {
+            // Method 1 - try formatM3U8File
+            let arguments = await buildDecryptAndCombineSegmentsFFmpegArguments(m3u8File: formatM3U8File, outputFile: outputFile)
+            try await executeFFmpegWithRetry(
+                command: ffmpegCommand,
+                arguments: arguments,
+                workingDirectory: directory.path
+            )
+        } catch {
+            // Method 2 - try ffmpeg buildin request
+            let arguments = await buildDecryptAndCombineSegmentsFFmpegArguments(m3u8File: m3u8File, outputFile: outputFile)
+            try await executeFFmpegWithRetry(
+                command: ffmpegCommand,
+                arguments: arguments,
+                workingDirectory: directory.path
+            )
+        }
+    }
+
+    /// Rewrites segment URIs in a local decrypted M3U8 playlist.
+    ///
+    /// This method scans media playlist entries and converts each segment URI line
+    /// (typically the line after `#EXTINF`) into a local file basename so FFmpeg can
+    /// resolve sibling segment files from disk.
+    ///
+    /// - Parameter url: The source decrypted M3U8 file URL.
+    /// - Returns: The URL of the rewritten local M3U8 file.
+    ///
+    /// - Throws:
+    ///   - Any file read/write error when loading or saving playlist content.
+    private func formatDecryptLocalM3U8File(url: URL) throws -> URL {
+        let m3u8Content = try String(contentsOf: url, encoding: .utf8)
+        var lines = m3u8Content.components(separatedBy: .newlines)
+        var expectSegmentURI = false
+
+        for index in lines.indices {
+            let trimmed = lines[index].trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if trimmed.hasPrefix("#EXTINF:") {
+                expectSegmentURI = true
+                continue
+            }
+
+            if expectSegmentURI {
+                if trimmed.isEmpty {
+                    continue
+                }
+                if trimmed.hasPrefix("#") {
+                    expectSegmentURI = false
+                    continue
+                }
+
+                lines[index] = URL(string: trimmed)?.lastPathComponent ?? URL(fileURLWithPath: trimmed).lastPathComponent
+                expectSegmentURI = false
+            }
+        }
+
+        let updatedContent = lines.joined(separator: "\n")
+        let reformattedM3U8Path = url.deletingLastPathComponent().appendingPathComponent(Constants.FileNames.localM3U8Reformatted)
+        try updatedContent.write(to: reformattedM3U8Path, atomically: true, encoding: .utf8)
+        return reformattedM3U8Path
     }
     
     // MARK: - Private Optimized Methods
@@ -352,11 +407,8 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
             "-fflags", "+genpts"
         ]
         
-        // Add performance optimizations
         arguments.append(contentsOf: [
-            "-threads", "0", // Use all available threads
-            "-preset", "ultrafast", // Fastest encoding
-            "-tune", "fastdecode" // Optimize for fast decoding
+            "-movflags", "+faststart"
         ])
         
         arguments.append(outputFile.path)
@@ -369,7 +421,7 @@ public struct DefaultVideoProcessor: VideoProcessorProtocol {
 
         return arguments
     }
-    
+
     /// Builds optimized FFmpeg arguments for decrypting and combining video segments
     /// 
     /// This method creates an array of FFmpeg command-line arguments optimized
