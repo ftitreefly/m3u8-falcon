@@ -85,9 +85,6 @@ m3u8-falcon download https://example.com/video.m3u8
 
 # Download with custom filename and verbose output
 m3u8-falcon download https://example.com/video.m3u8 --name my-video -v
-
-# Extract M3U8 links from web pages
-m3u8-falcon extract "https://example.com/video-page"
 ```
 
 That's it! For more advanced features, see the sections below.
