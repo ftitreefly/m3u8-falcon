@@ -65,7 +65,7 @@ struct InfoCommand: ParsableCommand {
         print("")
         print("Examples:")
         print("  m3u8-falcon info")
-        print("  m3u8-falcon download https://example.com/video.m3u8 --name my-video -v")
+        print("  m3u8-falcon https://example.com/video.m3u8 --name my-video -v")
         print("  m3u8-falcon extract \"https://example.com/video-page\" --methods direct-links")
     }
 } 

@@ -15,28 +15,28 @@ import M3U8Falcon
 /// to the user's Downloads directory. It supports both HTTP and HTTPS URLs.
 /// 
 /// ## Usage Examples
+/// `download` is the default subcommand; the examples below omit it.
 /// ```bash
 /// # Download with default settings
-/// m3u8-falcon download https://example.com/video.m3u8
+/// m3u8-falcon https://example.com/video.m3u8
 ///
 /// # Download from stdin (pipeline)
-/// echo 'https://example.com/video.m3u8' | m3u8-falcon download
 /// echo 'https://example.com/video.m3u8' | m3u8-falcon
 /// 
 /// # Download with custom filename
-/// m3u8-falcon download https://example.com/video.m3u8 --name my-video
+/// m3u8-falcon https://example.com/video.m3u8 --name my-video
 /// 
 /// # Download to custom directory
-/// m3u8-falcon download https://example.com/video.m3u8 --output /path/to/videos
+/// m3u8-falcon https://example.com/video.m3u8 --output /path/to/videos
 /// 
 /// # Download with verbose output
-/// m3u8-falcon download https://example.com/video.m3u8 -v
+/// m3u8-falcon https://example.com/video.m3u8 -v
 /// 
 /// # Download encrypted content with custom decryption key
-/// m3u8-falcon download https://example.com/video.m3u8 --key 0123456789abcdef0123456789abcdef
+/// m3u8-falcon https://example.com/video.m3u8 --key 0123456789abcdef0123456789abcdef
 /// 
 /// # Download encrypted content with both key and IV
-/// m3u8-falcon download https://example.com/video.m3u8 --key 0123456789abcdef0123456789abcdef --iv 0123456789abcdef0123456789abcdef
+/// m3u8-falcon https://example.com/video.m3u8 --key 0123456789abcdef0123456789abcdef --iv 0123456789abcdef0123456789abcdef
 /// ```
 /// 
 /// ## Output
