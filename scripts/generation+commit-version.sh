@@ -20,10 +20,7 @@ VERSION=$(cat "$VERSION_FILE" | xargs)
 git add "$VERSION_FILE" "$SCRIPT_DIR/../Sources/M3U8FalconCLI/Version.swift"
 
 # Commit the changes locally
-git commit -m "Bump version to v$VERSION"
+git commit -m "Bump m3u8-falcon CLI version to v$VERSION"
 
-# Create the annotated Git tag locally
-git tag -a "v$VERSION" -m "Release v$VERSION"
-
-echo "✅ Successfully committed and tagged local release v$VERSION!"
+echo "✅ Successfully committed release v$VERSION!"
 echo "   Review your changes with 'git log -n 1' or 'git tag -n'."

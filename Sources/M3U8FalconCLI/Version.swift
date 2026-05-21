@@ -6,5 +6,5 @@
 //
 
 enum CLI {
-    static let version = "1.2.5"
+    static let version = "1.3.2"
 }
