@@ -18,6 +18,10 @@ import M3U8Falcon
 /// ```bash
 /// # Download with default settings
 /// m3u8-falcon download https://example.com/video.m3u8
+///
+/// # Download from stdin (pipeline)
+/// echo 'https://example.com/video.m3u8' | m3u8-falcon download
+/// echo 'https://example.com/video.m3u8' | m3u8-falcon
 /// 
 /// # Download with custom filename
 /// m3u8-falcon download https://example.com/video.m3u8 --name my-video
@@ -61,11 +65,11 @@ struct DownloadCommand: AsyncParsableCommand {
     )
     
     /// The URL of the M3U8 file to download
-    /// 
+    ///
+    /// When omitted, reads a single URL from stdin (for pipeline usage).
     /// This must be a valid HTTP or HTTPS URL pointing to an M3U8 playlist file.
-    /// The URL should be accessible and the file should be a valid M3U8 format.
-    @Argument(help: "URL of the M3U8 file")
-    var url: String
+    @Argument(help: "URL of the M3U8 file (or pipe URL via stdin)")
+    var url: String?
 
     /// Optional custom name for the output file
     /// 
@@ -126,8 +130,9 @@ struct DownloadCommand: AsyncParsableCommand {
         await M3U8Falcon.initialize(verbose: verbose)
         
         try await validateFFmpegAvailability()
-            
-        guard let downloadURL = URL(string: url) else {
+
+        let urlString = try resolveURLString()
+        guard let downloadURL = URL(string: urlString) else {
             OutputFormatter.printError("Invalid URL format")
             throw ExitCode.failure
         }
@@ -238,6 +243,33 @@ struct OutputFormatter {
 // MARK: - Private Helpers
 
 private extension DownloadCommand {
+    /// Resolves the M3U8 URL from the positional argument or stdin.
+    func resolveURLString() throws -> String {
+        if let url,
+           !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return url.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let pipedURL = Self.readURLFromStandardInputIfAvailable() {
+            return pipedURL
+        }
+        OutputFormatter.printError(
+            "Missing URL. use '-- help' for more help information."
+        )
+        throw ExitCode.failure
+    }
+
+    /// Reads a URL from stdin when input is piped (non-TTY).
+    static func readURLFromStandardInputIfAvailable() -> String? {
+        guard isatty(STDIN_FILENO) == 0 else { return nil }
+        let data = FileHandle.standardInput.readDataToEndOfFile()
+        guard !data.isEmpty,
+              let text = String(data: data, encoding: .utf8) else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let firstLine = trimmed.split(omittingEmptySubsequences: true, whereSeparator: \.isNewline).first
+        return firstLine.map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
     /// Ensures FFmpeg is available before starting downloads
     func validateFFmpegAvailability() async throws {
         let configuration = try await GlobalDependencies.shared.resolve(DIConfiguration.self)
