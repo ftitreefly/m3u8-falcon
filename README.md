@@ -198,11 +198,17 @@ m3u8-falcon download https://example.com/video.m3u8 \
   --name my-video \
   -v
 
+# Download from standard input (pipeline support for non-TTY shells)
+echo "https://example.com/video.m3u8" | m3u8-falcon --name piped-video
+
+# Download using local files/paths (supports expanding tilde ~ and absolute file:// URLs)
+m3u8-falcon download ~/local-playlist.m3u8 --name local-video
+
 # Show tool information
 m3u8-falcon info
 ```
 
-Note: CLI URLs must use http or https schemes.
+Note: CLI URLs support http, https, file schemes, and tilde-expanded local paths.
 
 ---
 

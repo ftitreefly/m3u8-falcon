@@ -221,11 +221,17 @@ m3u8-falcon download https://example.com/video.m3u8 \
   --name my-video \
   -v
 
+# 支持从标准输入（stdin）管道读取 URL（适用于自动化脚本和管道流）
+echo "https://example.com/video.m3u8" | m3u8-falcon --name piped-video
+
+# 支持使用本地文件/路径（支持波浪号 ~ 展开和 file:// 协议）
+m3u8-falcon download ~/local-playlist.m3u8 --name local-video
+
 # 显示工具信息
 m3u8-falcon info
 ```
 
-注意：CLI URL必须使用http或https协议。
+注意：CLI URL 支持 http, https, file 协议以及支持波浪号展开的本地路径。
 
 ---
 
@@ -291,6 +297,7 @@ M3U8Falcon 使用 Swift Testing 框架进行全面的测试覆盖。
 ```bash
 # 运行所有测试
 swift test
+```
 
 ---
 
