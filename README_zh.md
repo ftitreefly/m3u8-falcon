@@ -91,14 +91,6 @@ m3u8-falcon https://example.com/video.m3u8 --name my-video -v
 
 M3U8Falcon 完整支持 Linux，并提供平台特定优化：
 
-### 平台特定功能
-
-- ✅ **进程执行**: Linux 优化的基于轮询的输出捕获
-- ✅ **流式下载**: 使用 URLSessionDataDelegate 的自定义字节流实现
-- ✅ **线程安全**: 平台感知的并发管理，使用 NSLock 和 DispatchGroup
-- ✅ **路径解析**: 支持 XDG Base Directory 规范的用户目录
-- ✅ **FFmpeg 集成**: 自动检测常见 Linux 安装位置的 FFmpeg 路径
-
 ### 平台差异
 
 库会自动处理平台差异：

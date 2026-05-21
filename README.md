@@ -97,15 +97,6 @@ That's it! For more advanced features, see the sections below.
 
 M3U8Falcon fully supports Linux with platform-specific optimizations:
 
-### Platform-Specific Features
-
-- ✅ **Process Execution**: Optimized polling-based output capture for Linux
-- ✅ **Streaming Downloads**: Custom byte streaming implementation using URLSessionDataDelegate
-- ✅ **Thread Safety**: Platform-aware concurrency management with NSLock and DispatchGroup
-- ✅ **Path Resolution**: XDG Base Directory specification support for user directories
-- ✅ **FFmpeg Integration**: Automatic FFmpeg path detection across common Linux installations
-
-
 ### Building on Linux
 
 ```bash
