@@ -131,14 +131,29 @@ struct DownloadCommand: AsyncParsableCommand {
         
         try await validateFFmpegAvailability()
 
-        let urlString = try resolveURLString()
-        guard let downloadURL = URL(string: urlString) else {
-            OutputFormatter.printError("Invalid URL format")
-            throw ExitCode.failure
+        // Validate Key/IV if provided
+        if let key = key {
+            try validateHexString(key, name: "Decryption key")
         }
-        if let scheme = downloadURL.scheme?.lowercased(), scheme != "http" && scheme != "https" {
-            OutputFormatter.printError("Unsupported URL scheme: \(scheme). Only http/https are supported.")
-            throw ExitCode.failure
+        if let iv = iv {
+            try validateHexString(iv, name: "Initialization vector")
+        }
+
+        let urlString = try resolveURLString()
+        let downloadURL: URL
+        let isWeb = urlString.lowercased().hasPrefix("http://") || urlString.lowercased().hasPrefix("https://")
+        
+        if isWeb {
+            guard let url = URL(string: urlString) else {
+                OutputFormatter.printError("Invalid URL format")
+                throw ExitCode.failure
+            }
+            downloadURL = url
+        } else {
+            // Treat as local file path or file URL
+            let cleanedString = urlString.hasPrefix("file://") ? String(urlString.dropFirst(7)) : urlString
+            let expandedPath = NSString(string: cleanedString).expandingTildeInPath
+            downloadURL = URL(fileURLWithPath: expandedPath)
         }
      
         do {
@@ -169,7 +184,7 @@ struct DownloadCommand: AsyncParsableCommand {
             }
             
             try await M3U8Falcon.download(
-                .web,
+                isWeb ? .web : .local,
                 url: downloadURL,
                 savedDirectory: outputDirectory,
                 name: name,
@@ -253,7 +268,7 @@ private extension DownloadCommand {
             return pipedURL
         }
         OutputFormatter.printError(
-            "Missing URL. use '-- help' for more help information."
+            "Missing URL. use '--help' for more help information."
         )
         throw ExitCode.failure
     }
@@ -297,6 +312,20 @@ private extension DownloadCommand {
             }
         } catch {
             // Silently fail if metrics are not available
+        }
+    }
+
+    /// Validates that a string is a valid hex string of exactly 32 characters (16 bytes)
+    func validateHexString(_ hexString: String, name: String) throws {
+        let trimmed = hexString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count == 32 else {
+            OutputFormatter.printError("\(name) must be exactly 32 hex characters (16 bytes).")
+            throw ExitCode.failure
+        }
+        let hexSet = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
+        guard trimmed.unicodeScalars.allSatisfy({ hexSet.contains($0) }) else {
+            OutputFormatter.printError("\(name) must contain only hexadecimal characters (0-9, a-f, A-F).")
+            throw ExitCode.failure
         }
     }
 }

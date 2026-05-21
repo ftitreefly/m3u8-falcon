@@ -42,8 +42,22 @@ struct ExtractCommand: AsyncParsableCommand {
     var url: String
     
     /// Extraction methods to use (comma-separated)
-    @Option(name: .long, help: "Extraction methods to use (comma-separated)")
-    var methods: String = "direct-links,javascript-variables"
+    @Option(
+        name: .long,
+        help: "Extraction methods to use (comma-separated)",
+        transform: { string in
+            let parts = string.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            var parsedMethods: [ExtractionMethod] = []
+            for part in parts {
+                guard let method = ExtractionMethod(argument: part) else {
+                    throw ValidationError("Invalid extraction method: '\(part)'. Supported methods: direct-links, javascript-variables, api-endpoints, video-elements, structured-data, regex-patterns")
+                }
+                parsedMethods.append(method)
+            }
+            return parsedMethods
+        }
+    )
+    var methods: [ExtractionMethod] = [.directLinks, .javascriptVariables]
     
     /// Whether to show extractor information
     @Flag(name: .long, help: "Show registered extractor information")
@@ -53,7 +67,7 @@ struct ExtractCommand: AsyncParsableCommand {
     /// 
     /// This method performs the main extraction workflow:
     /// 1. Validates the input URL
-    /// 2. Creates and configures the extractor registry
+    /// 2. Resolves the extractor registry from global dependencies
     /// 3. Registers demo extractors
     /// 4. Optionally displays extractor information
     /// 5. Performs the extraction using the unified interface
@@ -71,14 +85,11 @@ struct ExtractCommand: AsyncParsableCommand {
         
         print("🔍 Starting M3U8 link extraction from: \(targetURL)")
         
-        // Create extractor registry
-        let fileSystem = DefaultFileSystemService()
-        let networkClient = DefaultNetworkClient(
-            configuration: .performanceOptimized(),
-            fileSystem: fileSystem
-        )
-        let defaultExtractor = DefaultM3U8LinkExtractor(networkClient: networkClient)
-        let registry = DefaultM3U8ExtractorRegistry(defaultExtractor: defaultExtractor)
+        // Ensure global dependencies are initialized
+        await M3U8Falcon.initialize(verbose: false)
+        
+        // Resolve extractor registry from dependencies
+        let registry = try await GlobalDependencies.shared.resolve(M3U8ExtractorRegistryProtocol.self)
         
         // Register demo extractors
         registry.registerExtractor(YouTubeExtractor())
@@ -88,14 +99,11 @@ struct ExtractCommand: AsyncParsableCommand {
             displayExtractorInfo(registry)
         }
         
-        // Parse extraction methods
-        let extractionMethods = parseExtractionMethods(methods)
-        
         // Create extraction options
         let options = LinkExtractionOptions(
             timeout: 30.0,
             maxRetries: 3,
-            extractionMethods: extractionMethods,
+            extractionMethods: methods,
             userAgent: nil,
             followRedirects: true,
             customHeaders: [:],
@@ -119,42 +127,6 @@ struct ExtractCommand: AsyncParsableCommand {
     
     // MARK: - Private Methods
     
-    /// Parses extraction methods from a comma-separated string
-    /// 
-    /// This method converts user-friendly method names into the corresponding
-    /// `ExtractionMethod` enum values. It handles whitespace trimming and
-    /// provides fallback to default methods if parsing fails.
-    /// 
-    /// ## Supported Methods
-    /// - `direct-links` → `.directLinks`
-    /// - `javascript-variables` → `.javascriptVariables`
-    /// 
-    /// ## Fallback Behavior
-    /// If no valid methods are parsed, returns the default methods:
-    /// `[.directLinks, .javascriptVariables]`
-    /// 
-    /// - Parameter methodsString: Comma-separated string of method names
-    /// 
-    /// - Returns: Array of parsed extraction methods
-    private func parseExtractionMethods(_ methodsString: String) -> [ExtractionMethod] {
-        let methodStrings = methodsString.split(separator: ",").map(String.init)
-        var methods: [ExtractionMethod] = []
-        
-        for methodString in methodStrings {
-            let trimmed = methodString.trimmingCharacters(in: .whitespaces)
-            switch trimmed.lowercased() {
-            case "direct-links":
-                methods.append(.directLinks)
-            case "javascript-variables":
-                methods.append(.javascriptVariables)
-            default:
-                print("⚠️  Unknown extraction method: \(trimmed)")
-            }
-        }
-        
-        return methods.isEmpty ? [.directLinks, .javascriptVariables] : methods
-    }
-    
     /// Displays information about registered extractors
     /// 
     /// This method shows a formatted list of all registered extractors,
@@ -163,7 +135,7 @@ struct ExtractCommand: AsyncParsableCommand {
     /// are available for use.
     /// 
     /// - Parameter registry: The extractor registry to display information from
-    private func displayExtractorInfo(_ registry: DefaultM3U8ExtractorRegistry) {
+    private func displayExtractorInfo(_ registry: M3U8ExtractorRegistryProtocol) {
         print("📋 Registered Extractors:")
         let extractors = registry.getRegisteredExtractors()
         
@@ -217,3 +189,27 @@ struct ExtractCommand: AsyncParsableCommand {
         }
     }
 }
+
+// MARK: - ExpressibleByArgument Conformance
+
+extension ExtractionMethod: ExpressibleByArgument {
+    public init?(argument: String) {
+        switch argument.lowercased() {
+        case "direct-links", "direct_links":
+            self = .directLinks
+        case "javascript-variables", "javascript_variables":
+            self = .javascriptVariables
+        case "api-endpoints", "api_endpoints":
+            self = .apiEndpoints
+        case "video-elements", "video_elements":
+            self = .videoElements
+        case "structured-data", "structured_data":
+            self = .structuredData
+        case "regex-patterns", "regex_patterns":
+            self = .regexPatterns
+        default:
+            return nil
+        }
+    }
+}
+

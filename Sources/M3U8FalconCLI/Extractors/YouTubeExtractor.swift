@@ -149,7 +149,7 @@ public final class YouTubeExtractor: M3U8LinkExtractorProtocol {
         guard let host = url.host else { return false }
         
         return supportedDomains.contains { domain in
-            host.hasSuffix(domain) || host == domain
+            host == domain || host.hasSuffix("." + domain)
         }
     }
 }
