@@ -32,6 +32,3 @@ struct M3U8FalconCLI: AsyncParsableCommand {
     )
 }
 
-enum CLI {
-    static let version = "1.2.4"
-}
