@@ -101,13 +101,13 @@ swift build -c release
 
 ```bash
 # Download a video
-m3u8-falcon download https://example.com/video.m3u8
+m3u8-falcon https://example.com/video.m3u8
 
 # Download with custom filename
-m3u8-falcon download https://example.com/video.m3u8 --name my-video
+m3u8-falcon https://example.com/video.m3u8 --name my-video
 
 # Download with verbose output
-m3u8-falcon download https://example.com/video.m3u8 -v
+m3u8-falcon https://example.com/video.m3u8 -v
 
 # Extract M3U8 links from a web page
 m3u8-falcon extract "https://example.com/video-page"

@@ -126,10 +126,12 @@ final class MyCustomExtractor: M3U8LinkExtractorProtocol {
         )
     }
     
-    // Check if this extractor can handle the URL
+    // Check if this extractor can handle the URL securely (dot-delimited checking)
     public func canHandle(url: URL) -> Bool {
         guard let host = url.host else { return false }
-        return supportedDomains.contains { host.hasSuffix($0) }
+        return supportedDomains.contains { domain in
+            host == domain || host.hasSuffix("." + domain)
+        }
     }
 }
 ```

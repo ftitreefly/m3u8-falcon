@@ -86,7 +86,7 @@ M3U8 is a text-based playlist format used for HTTP Live Streaming (HLS). It cont
 - **Location**: `Sources/M3U8FalconCLI/`
 - **Purpose**: Command-line interface for end users
 - **Commands**:
-  - `download`: Download M3U8 videos
+  - `download` (default): Download M3U8 videos; subcommand name can be omitted (`m3u8-falcon <url>`)
   - `extract`: Extract M3U8 links from web pages
   - `info`: Show tool information
 

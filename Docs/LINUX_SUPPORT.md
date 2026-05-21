@@ -208,7 +208,7 @@ swift test --parallel
 swift build -c release
 
 # Run CLI directly
-swift run m3u8-falcon download https://example.com/video.m3u8
+swift run m3u8-falcon https://example.com/video.m3u8
 
 # Install CLI (optional)
 sudo cp .build/release/m3u8-falcon /usr/local/bin/
@@ -344,6 +344,6 @@ swift test --filter PerformanceOptimizedTests
 
 ---
 
-**Last Updated**: 2025-11-16
-**M3U8Falcon Version**: 1.2.0+
+**Last Updated**: 2026-05-22
+**M3U8Falcon Version**: 1.3.2+
 

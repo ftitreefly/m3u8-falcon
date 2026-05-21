@@ -75,10 +75,10 @@ print("✅ 视频下载成功！")
 
 ```bash
 # 使用单条命令下载M3U8视频
-m3u8-falcon download https://example.com/video.m3u8
+m3u8-falcon https://example.com/video.m3u8
 
 # 使用自定义文件名和详细输出下载
-m3u8-falcon download https://example.com/video.m3u8 --name my-video -v
+m3u8-falcon https://example.com/video.m3u8 --name my-video -v
 ```
 
 就是这样！更多高级功能请参见下面的章节。
@@ -121,7 +121,7 @@ swift build
 swift test
 
 # 运行 CLI
-swift run m3u8-falcon download https://example.com/video.m3u8 -v
+swift run m3u8-falcon https://example.com/video.m3u8 -v
 ```
 
 ---
@@ -203,19 +203,19 @@ case .cancelled:
 
 ```bash
 # 使用默认设置下载M3U8文件
-m3u8-falcon download https://example.com/video.m3u8
+m3u8-falcon https://example.com/video.m3u8
 
 # 使用自定义文件名下载
-m3u8-falcon download https://example.com/video.m3u8 --name my-video
+m3u8-falcon https://example.com/video.m3u8 --name my-video
 
 # 下载到自定义目录
-m3u8-falcon download https://example.com/video.m3u8 --output /path/to/videos
+m3u8-falcon https://example.com/video.m3u8 --output /path/to/videos
 
 # 使用自定义解密密钥下载加密的M3U8
-m3u8-falcon download https://example.com/video.m3u8 --key 0123456789abcdef0123456789abcdef
+m3u8-falcon https://example.com/video.m3u8 --key 0123456789abcdef0123456789abcdef
 
 # 使用自定义密钥和IV下载
-m3u8-falcon download https://example.com/video.m3u8 \
+m3u8-falcon https://example.com/video.m3u8 \
   --key 0123456789abcdef0123456789abcdef \
   --iv 0123456789abcdef0123456789abcdef \
   --name my-video \
@@ -225,13 +225,13 @@ m3u8-falcon download https://example.com/video.m3u8 \
 echo "https://example.com/video.m3u8" | m3u8-falcon --name piped-video
 
 # 支持使用本地文件/路径（支持波浪号 ~ 展开和 file:// 协议）
-m3u8-falcon download ~/local-playlist.m3u8 --name local-video
+m3u8-falcon ~/local-playlist.m3u8 --name local-video
 
 # 显示工具信息
 m3u8-falcon info
 ```
 
-注意：CLI URL 支持 http, https, file 协议以及支持波浪号展开的本地路径。
+注意：`download` 为默认子命令，可省略（`m3u8-falcon <url>`）；显式写法 `m3u8-falcon download <url>` 仍然有效。CLI URL 支持 http、https、file 协议以及支持波浪号展开的本地路径。
 
 ---
 

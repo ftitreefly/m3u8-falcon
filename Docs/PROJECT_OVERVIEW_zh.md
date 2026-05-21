@@ -86,7 +86,7 @@ M3U8 是一种基于文本的播放列表格式，用于 HTTP 直播流（HLS）
 - **位置**：`Sources/M3U8FalconCLI/`
 - **目的**：面向最终用户的命令行接口
 - **命令**：
-  - `download`：下载 M3U8 视频
+  - `download`（默认）：下载 M3U8 视频；可省略子命令名（`m3u8-falcon <url>`）
   - `extract`：从网页提取 M3U8 链接
   - `info`：显示工具信息
 

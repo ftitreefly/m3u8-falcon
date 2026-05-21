@@ -101,28 +101,34 @@ case .cancelled:
 
 ### Download Command
 
-Download M3U8 videos from URLs.
+Download M3U8 videos from URLs. `download` is the default subcommand, so you can pass the URL directly (`m3u8-falcon <url>`). The explicit form `m3u8-falcon download <url>` still works.
 
 ```bash
 # Basic download
-m3u8-falcon download https://example.com/video.m3u8
+m3u8-falcon https://example.com/video.m3u8
 
 # With custom filename
-m3u8-falcon download https://example.com/video.m3u8 --name my-video
+m3u8-falcon https://example.com/video.m3u8 --name my-video
 
 # With verbose output
-m3u8-falcon download https://example.com/video.m3u8 -v
+m3u8-falcon https://example.com/video.m3u8 -v
 
 # Download encrypted video with custom key
-m3u8-falcon download https://example.com/video.m3u8 \
+m3u8-falcon https://example.com/video.m3u8 \
   --key 0123456789abcdef0123456789abcdef
 
 # Download with custom key and IV
-m3u8-falcon download https://example.com/video.m3u8 \
+m3u8-falcon https://example.com/video.m3u8 \
   --key 0123456789abcdef0123456789abcdef \
   --iv 0123456789abcdef0123456789abcdef \
   --name my-video \
   -v
+
+# Download from standard input (pipeline support for non-TTY terminals)
+echo "https://example.com/video.m3u8" | m3u8-falcon --name piped-video
+
+# Download local playlists (supports expanding tilde ~ and absolute file:// URLs)
+m3u8-falcon ~/Downloads/local-playlist.m3u8 --name local-video
 ```
 
 **Options:**

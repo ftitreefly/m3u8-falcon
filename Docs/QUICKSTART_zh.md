@@ -101,13 +101,13 @@ swift build -c release
 
 ```bash
 # 下载视频
-m3u8-falcon download https://example.com/video.m3u8
+m3u8-falcon https://example.com/video.m3u8
 
 # 使用自定义文件名下载
-m3u8-falcon download https://example.com/video.m3u8 --name my-video
+m3u8-falcon https://example.com/video.m3u8 --name my-video
 
 # 使用详细输出下载
-m3u8-falcon download https://example.com/video.m3u8 -v
+m3u8-falcon https://example.com/video.m3u8 -v
 
 # 从网页提取 M3U8 链接
 m3u8-falcon extract "https://example.com/video-page"

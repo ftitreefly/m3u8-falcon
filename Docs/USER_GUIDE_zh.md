@@ -101,28 +101,34 @@ case .cancelled:
 
 ### Download 命令
 
-从 URL 下载 M3U8 视频。
+从 URL 下载 M3U8 视频。`download` 为默认子命令，可直接传入 URL（`m3u8-falcon <url>`）；显式写法 `m3u8-falcon download <url>` 仍然有效。
 
 ```bash
 # 基础下载
-m3u8-falcon download https://example.com/video.m3u8
+m3u8-falcon https://example.com/video.m3u8
 
 # 使用自定义文件名
-m3u8-falcon download https://example.com/video.m3u8 --name my-video
+m3u8-falcon https://example.com/video.m3u8 --name my-video
 
 # 使用详细输出
-m3u8-falcon download https://example.com/video.m3u8 -v
+m3u8-falcon https://example.com/video.m3u8 -v
 
 # 使用自定义密钥下载加密视频
-m3u8-falcon download https://example.com/video.m3u8 \
+m3u8-falcon https://example.com/video.m3u8 \
   --key 0123456789abcdef0123456789abcdef
 
 # 使用自定义密钥和 IV 下载
-m3u8-falcon download https://example.com/video.m3u8 \
+m3u8-falcon https://example.com/video.m3u8 \
   --key 0123456789abcdef0123456789abcdef \
   --iv 0123456789abcdef0123456789abcdef \
   --name my-video \
   -v
+
+# 从标准输入（stdin）管道下载（非 TTY 管道支持）
+echo "https://example.com/video.m3u8" | m3u8-falcon --name piped-video
+
+# 下载本地离线播放列表（支持波浪号 ~ 展开和 file:// 协议）
+m3u8-falcon ~/Downloads/local-playlist.m3u8 --name local-video
 ```
 
 **选项：**

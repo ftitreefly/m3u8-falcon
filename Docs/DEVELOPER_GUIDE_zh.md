@@ -126,10 +126,12 @@ final class MyCustomExtractor: M3U8LinkExtractorProtocol {
         )
     }
     
-    // 检查此提取器是否可以处理该 URL
+    // 安全地检查此提取器是否可以处理该 URL（使用点分隔检测安全策略）
     public func canHandle(url: URL) -> Bool {
         guard let host = url.host else { return false }
-        return supportedDomains.contains { host.hasSuffix($0) }
+        return supportedDomains.contains { domain in
+            host == domain || host.hasSuffix("." + domain)
+        }
     }
 }
 ```

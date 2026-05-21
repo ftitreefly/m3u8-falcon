@@ -81,10 +81,10 @@ print("✅ Video downloaded successfully!")
 
 ```bash
 # Download M3U8 video with a single command
-m3u8-falcon download https://example.com/video.m3u8
+m3u8-falcon https://example.com/video.m3u8
 
 # Download with custom filename and verbose output
-m3u8-falcon download https://example.com/video.m3u8 --name my-video -v
+m3u8-falcon https://example.com/video.m3u8 --name my-video -v
 ```
 
 That's it! For more advanced features, see the sections below.
@@ -116,7 +116,7 @@ swift build
 swift test
 
 # Run CLI
-swift run m3u8-falcon download https://example.com/video.m3u8 -v
+swift run m3u8-falcon https://example.com/video.m3u8 -v
 ```
 
 ---
@@ -180,19 +180,19 @@ try await M3U8Falcon.download(
 
 ```bash
 # Download an M3U8 file with default settings
-m3u8-falcon download https://example.com/video.m3u8
+m3u8-falcon https://example.com/video.m3u8
 
 # Download with custom filename
-m3u8-falcon download https://example.com/video.m3u8 --name my-video
+m3u8-falcon https://example.com/video.m3u8 --name my-video
 
 # Download to custom directory
-m3u8-falcon download https://example.com/video.m3u8 --output /path/to/videos
+m3u8-falcon https://example.com/video.m3u8 --output /path/to/videos
 
 # Download encrypted M3U8 with custom decryption key
-m3u8-falcon download https://example.com/video.m3u8 --key 0123456789abcdef0123456789abcdef
+m3u8-falcon https://example.com/video.m3u8 --key 0123456789abcdef0123456789abcdef
 
 # Download with both custom key and IV
-m3u8-falcon download https://example.com/video.m3u8 \
+m3u8-falcon https://example.com/video.m3u8 \
   --key 0123456789abcdef0123456789abcdef \
   --iv 0123456789abcdef0123456789abcdef \
   --name my-video \
@@ -202,13 +202,13 @@ m3u8-falcon download https://example.com/video.m3u8 \
 echo "https://example.com/video.m3u8" | m3u8-falcon --name piped-video
 
 # Download using local files/paths (supports expanding tilde ~ and absolute file:// URLs)
-m3u8-falcon download ~/local-playlist.m3u8 --name local-video
+m3u8-falcon ~/local-playlist.m3u8 --name local-video
 
 # Show tool information
 m3u8-falcon info
 ```
 
-Note: CLI URLs support http, https, file schemes, and tilde-expanded local paths.
+Note: `download` is the default subcommand, so you can omit it (`m3u8-falcon <url>`). The explicit form `m3u8-falcon download <url>` still works. CLI URLs support http, https, file schemes, and tilde-expanded local paths.
 
 ---
 
