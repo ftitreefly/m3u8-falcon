@@ -25,7 +25,6 @@ struct M3U8FalconCLI: AsyncParsableCommand {
         version: CLI.version,
         subcommands: [
             DownloadCommand.self,
-            InfoCommand.self,
             ExtractCommand.self
         ],
         defaultSubcommand: DownloadCommand.self

@@ -156,14 +156,6 @@ m3u8-falcon extract "https://example.com/video-page" --methods direct-links
 - `--show-extractors`: Display all registered extractors
 - `--methods <methods>`: Specify extraction methods (comma-separated)
 
-### Info Command
-
-Display tool information.
-
-```bash
-m3u8-falcon info
-```
-
 ## Advanced Features
 
 ### Encrypted Streams

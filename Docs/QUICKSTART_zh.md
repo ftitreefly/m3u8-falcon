@@ -112,8 +112,6 @@ m3u8-falcon https://example.com/video.m3u8 -v
 # 从网页提取 M3U8 链接
 m3u8-falcon extract "https://example.com/video-page"
 
-# 显示工具信息
-m3u8-falcon info
 ```
 
 ## 常见使用场景

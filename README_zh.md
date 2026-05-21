@@ -218,8 +218,6 @@ echo "https://example.com/video.m3u8" | m3u8-falcon --name piped-video
 # 支持使用本地文件/路径（支持波浪号 ~ 展开和 file:// 协议）
 m3u8-falcon ~/local-playlist.m3u8 --name local-video
 
-# 显示工具信息
-m3u8-falcon info
 ```
 
 注意：`download` 为默认子命令，可省略（`m3u8-falcon <url>`）；显式写法 `m3u8-falcon download <url>` 仍然有效。CLI URL 支持 http、https、file 协议以及支持波浪号展开的本地路径。

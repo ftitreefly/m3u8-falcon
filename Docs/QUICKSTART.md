@@ -112,8 +112,6 @@ m3u8-falcon https://example.com/video.m3u8 -v
 # Extract M3U8 links from a web page
 m3u8-falcon extract "https://example.com/video-page"
 
-# Show tool information
-m3u8-falcon info
 ```
 
 ## Common Use Cases

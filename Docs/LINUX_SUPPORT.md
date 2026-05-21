@@ -91,7 +91,7 @@ swift build
 swift test
 
 # Test CLI
-swift run m3u8-falcon info
+swift run m3u8-falcon --version
 ```
 
 ## Platform-Specific Features

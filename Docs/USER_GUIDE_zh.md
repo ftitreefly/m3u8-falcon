@@ -156,14 +156,6 @@ m3u8-falcon extract "https://example.com/video-page" --methods direct-links
 - `--show-extractors`：显示所有已注册的提取器
 - `--methods <methods>`：指定提取方法（逗号分隔）
 
-### Info 命令
-
-显示工具信息。
-
-```bash
-m3u8-falcon info
-```
-
 ## 高级功能
 
 ### 加密流

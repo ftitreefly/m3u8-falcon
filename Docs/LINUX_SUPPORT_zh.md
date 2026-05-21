@@ -91,7 +91,7 @@ swift build
 swift test
 
 # 测试 CLI
-swift run m3u8-falcon info
+swift run m3u8-falcon --version
 ```
 
 ## 平台特定功能

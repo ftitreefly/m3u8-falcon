@@ -194,8 +194,6 @@ echo "https://example.com/video.m3u8" | m3u8-falcon --name piped-video
 # Download using local files/paths (supports expanding tilde ~ and absolute file:// URLs)
 m3u8-falcon ~/local-playlist.m3u8 --name local-video
 
-# Show tool information
-m3u8-falcon info
 ```
 
 Note: `download` is the default subcommand, so you can omit it (`m3u8-falcon <url>`). The explicit form `m3u8-falcon download <url>` still works. CLI URLs support http, https, file schemes, and tilde-expanded local paths.
