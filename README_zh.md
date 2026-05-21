@@ -60,15 +60,17 @@ import M3U8Falcon
 // 首先初始化库（必需）
 await M3U8Falcon.initialize()
 
-// 从M3U8 URL下载视频
-// savedDirectory 是可选的 - 默认为 Downloads 文件夹
-try await M3U8Falcon.download(
-    .web,
-    url: URL(string: "https://example.com/video.m3u8")!,
-    name: "my-video"
-)
-
-print("✅ 视频下载成功！")
+do {
+    // 从M3U8 URL下载视频（savedDirectory 是可选的 - 默认为 Downloads 文件夹）
+    // 下载方式（.web 或 .local）会自动根据 URL scheme 进行推导！
+    try await M3U8Falcon.download(
+        url: URL(string: "https://example.com/video.m3u8")!,
+        name: "my-video"
+    )
+    print("✅ 视频下载成功！")
+} catch {
+    print("❌ 下载失败：\(error)")
+}
 ```
 
 ### CLI工具 - 一条命令下载视频
@@ -147,15 +149,14 @@ import M3U8Falcon
 await M3U8Falcon.initialize()
 
 // 下载M3U8文件（savedDirectory 是可选的，默认为 Downloads 文件夹）
+// 下载方式（.web 或 .local）会自动根据 URL scheme 进行推导！
 try await M3U8Falcon.download(
-    .web,
     url: URL(string: "https://example.com/video.m3u8")!,
     name: "my-video"
 )
 
 // 使用自定义目录下载
 try await M3U8Falcon.download(
-    .web,
     url: URL(string: "https://example.com/video.m3u8")!,
     savedDirectory: URL(fileURLWithPath: "/Users/username/Downloads/videos/"),
     name: "my-video"
@@ -163,7 +164,6 @@ try await M3U8Falcon.download(
 
 // 使用自定义AES-128解密下载加密的M3U8
 try await M3U8Falcon.download(
-    .web,
     url: URL(string: "https://example.com/encrypted-video.m3u8")!,
     name: "encrypted-video",
     strategy: .customAES128(
@@ -174,7 +174,6 @@ try await M3U8Falcon.download(
 
 // 仅使用密钥下载加密的M3U8（IV从片段序列号派生）
 try await M3U8Falcon.download(
-    .web,
     url: URL(string: "https://example.com/encrypted-video.m3u8")!,
     name: "encrypted-video",
     strategy: .customAES128(key: "0123456789abcdef0123456789abcdef")
@@ -266,7 +265,6 @@ Logger.configure(.development())
 ```swift
 // 使用密钥和IV的自定义AES-128解密
 try await M3U8Falcon.download(
-    .web,
     url: encryptedVideoURL,
     name: "encrypted-video",
     strategy: .customAES128(
@@ -277,7 +275,6 @@ try await M3U8Falcon.download(
 
 // 仅使用密钥的自定义AES-128解密（IV从片段序列号派生）
 try await M3U8Falcon.download(
-    .web,
     url: encryptedVideoURL,
     name: "encrypted-video",
     strategy: .customAES128(key: "0123456789abcdef0123456789abcdef")

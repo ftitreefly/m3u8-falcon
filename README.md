@@ -66,15 +66,17 @@ import M3U8Falcon
 // ⚠️ IMPORTANT: Initialize the library first (required)
 await M3U8Falcon.initialize()
 
-// Download a video from M3U8 URL
-// savedDirectory is optional - defaults to Downloads folder
-try await M3U8Falcon.download(
-    .web,
-    url: URL(string: "https://example.com/video.m3u8")!,
-    name: "my-video"
-)
-
-print("✅ Video downloaded successfully!")
+do {
+    // Download a video from M3U8 URL (savedDirectory is optional, defaults to Downloads folder)
+    // The download method (.web or .local) is automatically inferred from the URL scheme!
+    try await M3U8Falcon.download(
+        url: URL(string: "https://example.com/video.m3u8")!,
+        name: "my-video"
+    )
+    print("✅ Video downloaded successfully!")
+} catch {
+    print("❌ Download failed: \(error)")
+}
 ```
 
 ### CLI Tool - One Command to Download
@@ -142,15 +144,14 @@ import M3U8Falcon
 await M3U8Falcon.initialize()
 
 // Download an M3U8 file (savedDirectory is optional, defaults to Downloads folder)
+// The download method (.web or .local) is automatically inferred from the URL scheme!
 try await M3U8Falcon.download(
-    .web,
     url: URL(string: "https://example.com/video.m3u8")!,
     name: "my-video"
 )
 
 // Download with custom directory
 try await M3U8Falcon.download(
-    .web,
     url: URL(string: "https://example.com/video.m3u8")!,
     savedDirectory: URL(fileURLWithPath: "/Users/username/Downloads/videos/"),
     name: "my-video"
@@ -158,7 +159,6 @@ try await M3U8Falcon.download(
 
 // Download encrypted M3U8 with custom AES-128 decryption
 try await M3U8Falcon.download(
-    .web,
     url: URL(string: "https://example.com/encrypted-video.m3u8")!,
     name: "encrypted-video",
     strategy: .customAES128(
@@ -169,7 +169,6 @@ try await M3U8Falcon.download(
 
 // Download encrypted M3U8 with key only (IV derived from segment sequence)
 try await M3U8Falcon.download(
-    .web,
     url: URL(string: "https://example.com/encrypted-video.m3u8")!,
     name: "encrypted-video",
     strategy: .customAES128(key: "0123456789abcdef0123456789abcdef")
@@ -245,14 +244,12 @@ For encrypted M3U8 streams, you can provide custom AES-128 decryption using the 
 ```swift
 // No decryption (default)
 try await M3U8Falcon.download(
-    .web,
     url: videoURL,
     name: "video"
 )
 
 // Custom AES-128 decryption with key and IV
 try await M3U8Falcon.download(
-    .web,
     url: encryptedVideoURL,
     name: "encrypted-video",
     strategy: .customAES128(
@@ -263,7 +260,6 @@ try await M3U8Falcon.download(
 
 // Custom AES-128 decryption with key only (IV derived from segment sequence)
 try await M3U8Falcon.download(
-    .web,
     url: encryptedVideoURL,
     name: "encrypted-video",
     strategy: .customAES128(key: "0123456789abcdef0123456789abcdef")
