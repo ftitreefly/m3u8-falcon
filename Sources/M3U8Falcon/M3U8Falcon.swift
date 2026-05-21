@@ -125,7 +125,7 @@ public struct M3U8Falcon {
     /// )
     /// ```
     public static func download(
-        _ method: Method = .web,
+        _ method: Method? = nil,
         url: URL,
         savedDirectory: URL? = nil,
         name: String? = nil,
@@ -136,6 +136,7 @@ public struct M3U8Falcon {
             throw ConfigurationError.notInitialized()
         }
         
+        let method = method ?? Method.infer(from: url)
         let resolvedDirectory = try await resolvedDirectory(savedDirectory)
         
         let baseUrl = method.baseURL ?? url.deletingLastPathComponent()
@@ -203,7 +204,7 @@ public struct M3U8Falcon {
     /// ```
     public static func parse(
         url: URL,
-        method: Method = .web
+        method: Method? = nil
     ) async throws -> M3U8Parser.ParserResult {
         guard await GlobalDependencies.shared.isConfigured() else {
             throw ConfigurationError.notInitialized()
@@ -211,6 +212,8 @@ public struct M3U8Falcon {
         let downloader = try await GlobalDependencies.shared.resolve(M3U8DownloaderProtocol.self)
         let parser = try await GlobalDependencies.shared.resolve(M3U8ParserServiceProtocol.self)
         let fileSystem = try await GlobalDependencies.shared.resolve(FileSystemServiceProtocol.self)
+        
+        let method = method ?? Method.infer(from: url)
         
         do {
             let baseURL: URL

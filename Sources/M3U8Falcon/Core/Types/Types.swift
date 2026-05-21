@@ -297,6 +297,17 @@ extension Method {
   public var baseURL: URL? {
     return nil
   }
+  
+  /// Infers the method from the URL scheme
+  ///
+  /// - Parameter url: The URL to inspect
+  /// - Returns: `.local` if the URL is a local file URL or has a `"file"` scheme, otherwise `.web`.
+  public static func infer(from url: URL) -> Method {
+    if url.isFileURL || url.scheme?.lowercased() == "file" {
+      return .local
+    }
+    return .web
+  }
 }
 
 extension DownloadState {

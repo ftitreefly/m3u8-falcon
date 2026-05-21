@@ -155,6 +155,21 @@ final class IntegrationTests {
         }
     }
     
+    // MARK: - Method Inference Integration
+    
+    @Test("Method auto-inference detects web and local URLs")
+    func methodAutoInference() throws {
+        let webURL1 = URL(string: "https://example.com/video.m3u8")!
+        let webURL2 = URL(string: "http://example.com/video.m3u8")!
+        let localURL1 = URL(fileURLWithPath: "/path/to/video.m3u8")
+        let localURL2 = URL(string: "file:///path/to/video.m3u8")!
+        
+        #expect(Method.infer(from: webURL1) == .web)
+        #expect(Method.infer(from: webURL2) == .web)
+        #expect(Method.infer(from: localURL1) == .local)
+        #expect(Method.infer(from: localURL2) == .local)
+    }
+    
     // MARK: - Extractor Registry Integration
     
     @Test("Custom extractor metadata persists")
